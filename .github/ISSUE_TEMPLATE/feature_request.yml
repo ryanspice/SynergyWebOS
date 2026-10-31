@@ -1,0 +1,44 @@
+name: Feature request
+description: Suggest an improvement for the TV app, dock, client or tooling
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What is hard or impossible today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the behaviour you want, ideally with the 1080p TV layout/settings in mind.
+    validations:
+      required: true
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - TV app (UI)
+        - TV client (client.py / tvctl)
+        - Dock / app switcher
+        - Handoff / Synergy config tooling
+        - Home-key handling
+        - Build / packaging
+        - Documentation
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: checkboxes
+    id: constraints
+    attributes:
+      label: Constraints
+      options:
+        - label: This does not depend on, or target, a third-party home screen.
+        - label: This works with a keyboard and mouse at 1080p.
+        - label: This does not require changing live TV/PC state without the maintainer.

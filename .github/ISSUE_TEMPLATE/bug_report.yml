@@ -1,0 +1,84 @@
+name: Bug report
+description: Report a defect in the TV app, dock, client or tooling
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before filing: check the README and `docs/`, and search existing issues.
+        **Never paste secrets, license keys, SSH/device keys, unredacted IPs,
+        machine names or personal data.** For security issues use
+        SECURITY.md instead of a public issue.
+  - type: input
+    id: version
+    attributes:
+      label: Version / commit
+      description: App version (`appinfo.json`) or commit SHA.
+      placeholder: e.g. 0.1.8 or 1a2b3c4
+    validations:
+      required: true
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - TV app (UI)
+        - TV client (client.py / tvctl)
+        - Dock / app switcher
+        - Handoff / Synergy config tooling
+        - Home-key handling
+        - Build / packaging
+        - Documentation
+    validations:
+      required: true
+  - type: input
+    id: tv
+    attributes:
+      label: TV model and webOS version
+      placeholder: e.g. LG OLED C-series, webOS 6.4
+    validations:
+      required: true
+  - type: input
+    id: pc
+    attributes:
+      label: PC OS + Synergy version
+      placeholder: e.g. Windows 11 24H2, Synergy 3.x
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. ...
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behaviour
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Redacted logs / screenshots
+      description: Remove host IPs, machine names, usernames and license data.
+      render: text
+  - type: dropdown
+    id: safety
+    attributes:
+      label: Did this break live TV/PC control?
+      options:
+        - 'No'
+        - 'Yes (pointer/keyboard lost)'
+        - 'Unknown'
+    validations:
+      required: true

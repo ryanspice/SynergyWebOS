@@ -1,0 +1,32 @@
+#!/bin/sh
+# synergy-tv pre-commit guard (optional).
+#
+# Enable once per clone:
+#     git config core.hooksPath .githooks
+#
+# Blocks staged changes that include secrets, backups, proprietary Synergy
+# bundles, dependency folders or build output (see docs/repo-policy.md).
+# It is a safety net, not a substitute for reviewing what you stage.
+#
+# Bypass only with a written reason in the PR: git commit --no-verify
+
+if command -v pwsh >/dev/null 2>&1; then
+    PS=pwsh
+elif command -v powershell >/dev/null 2>&1; then
+    PS=powershell
+else
+    echo "pre-commit: PowerShell not found; skipping repo guard." >&2
+    exit 0
+fi
+
+if [ ! -f scripts/check-repo-guards.ps1 ]; then
+    exit 0
+fi
+
+"$PS" -NoProfile -NonInteractive -File scripts/check-repo-guards.ps1 -Staged
+status=$?
+if [ "$status" -ne 0 ]; then
+    echo "pre-commit: blocked. Unstage the offending files (git restore --staged <path>)." >&2
+    exit "$status"
+fi
+exit 0

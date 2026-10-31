@@ -1,0 +1,189 @@
+# synergy-tv — ignore rules
+#
+# Policy: the repository must never contain secrets, license keys, backups,
+# proprietary Synergy bundles or build junk. These rules are a safety net, not
+# a substitute for review: `git add -A` is not used in this repo. Known files
+# are staged explicitly, and the pre-commit hook in .githooks/ blocks sensitive
+# or proprietary paths that are staged by accident.
+#
+# Output conventions (see docs/repo-policy.md):
+#   dist/                     ignored — all build output
+#   dist/release/*.ipk        whitelisted — deliberate local releases
+#   releases/*.ipk            whitelisted — optional alternate release folder
+# GitHub Releases are the preferred publication channel; packages are never
+# committed as part of normal development.
+
+# ---------------------------------------------------------------------------
+# Node / JS toolchain
+# ---------------------------------------------------------------------------
+node_modules/
+.pnpm-store/
+.yarn/
+.npm/
+.pnp.*
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.eslintcache
+.stylelintcache
+.svelte-kit/
+.vite/
+.turbo/
+*.tsbuildinfo
+
+# ---------------------------------------------------------------------------
+# Build outputs (except the deliberate release folders below)
+# ---------------------------------------------------------------------------
+dist/
+!dist/release/
+# Build output directories: root `/build`, `app/build/` and `dock/build/`.
+# `scripts/build/` (the pipeline source) is deliberately NOT ignored.
+/build/
+/app/build/
+/dock/build/
+out/
+coverage/
+*.ipk
+*.wgt
+!dist/release/*.ipk
+!releases/*.ipk
+*.aab
+*.apk
+*.exe
+*.msi
+*.dmg
+*.AppImage
+
+# webOS packaging intermediates
+ares-*.json
+webos-meta/
+*.lock.bak
+
+# IDE / OS noise
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.recommended.json
+.idea/
+*.suo
+*.user
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# ---------------------------------------------------------------------------
+# Environment, secrets, credentials
+# ---------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.crt
+*.cer
+.webos/
+secrets/*
+!secrets/README.md
+credentials/
+*.secret
+*.secrets
+*.token
+id_rsa*
+id_ed25519*
+id_ecdsa*
+id_dsa*
+*.password
+*.passwd
+*.htpasswd
+.npmrc
+.pypirc
+.gcloud/
+.aws/
+.azure/
+kubeconfig*
+
+# Local license keys / activation data (never commit). The root LICENSE file
+# is whitelisted.
+license*
+!LICENSE
+!LICENSE.md
+LICENSE.txt
+*.license
+*.lic
+activation*
+
+# Local (per-machine) config values: LAN addresses, screen names, device keys.
+*.local.json
+settings.local.json
+hosts.local.json
+config/*.json
+!config/**/*.example.json
+appinfo.local.json
+*.keystore.local
+
+# ---------------------------------------------------------------------------
+# Backups and working copies
+# ---------------------------------------------------------------------------
+*.bak
+*.bak.*
+*.orig
+*.rej
+*.old
+*.save
+*.sav
+*.tmp
+*.temp
+*~
+backups/
+# Synergy config / Synergy 3 database snapshots. `*.example` templates
+# (e.g. tools/synergy/candidate.conf.example) are intentionally allowed.
+*.synergy
+*.synergy.conf
+synergy.conf
+db.json
+local.json
+settings-before.json
+settings-after.json
+
+# ---------------------------------------------------------------------------
+# Proprietary Synergy / Symless artifacts — used in place, never redistributed
+# ---------------------------------------------------------------------------
+# Proprietary Synergy installs/bundles sit at the root as `Synergy/`,
+# `vendor/synergy/` or `synergy-core*`; the repo's own `tools/synergy/` source
+# folder must stay committable, hence the case-sensitive root anchoring.
+/Synergy/
+/vendor/synergy/
+synergy-core*
+*.asar
+app.asar
+Synergy.exe
+Synergy-*.exe
+Synergy-*.bin
+
+# ---------------------------------------------------------------------------
+# Personal data / evidence captures
+# ---------------------------------------------------------------------------
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+*.bmp
+!app/**/*.png
+!dock/**/*.png
+!config/icons/*.png
+screenshots-local/
+captures/
+
+# ---------------------------------------------------------------------------
+# Logs and runtime state
+# ---------------------------------------------------------------------------
+*.log
+logs/
+synergy-webos.log
+synergy-webos-state.json
+*.pid

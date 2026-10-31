@@ -1,0 +1,108 @@
+# Repository CI for synergy-tv.
+#
+# Two jobs:
+#   1. repo-guards  — always runs; no dependency install. Checks the repository
+#                     hygiene rules (no secrets/backups/proprietary files) and
+#                     documentation links.
+#   2. build-test   — runs only once the build workstream has landed
+#                     scripts/build/build.ps1 (or package.json + lockfile).
+#                     It is skipped, not failed, while the repo is scaffolding.
+#
+# Live TV/PC checks are NOT part of CI. They require a rooted TV and the live
+# Synergy server and are recorded manually as maintainer acceptance (see
+# docs/github-setup.md).
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  repo-guards:
+    name: Repo hygiene + docs links
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Guard against committed secrets, backups and proprietary bundles
+        shell: pwsh
+        run: ./scripts/check-repo-guards.ps1
+
+      - name: Check documentation links
+        shell: pwsh
+        run: ./scripts/check-docs-links.ps1
+
+  detect-build:
+    name: Detect build pipeline
+    runs-on: ubuntu-latest
+    outputs:
+      present: ${{ steps.detect.outputs.present }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Detect build entry point
+        id: detect
+        shell: pwsh
+        run: |
+          $hasScript = Test-Path './scripts/build/build.ps1'
+          $hasNode = (Test-Path './package.json') -and
+                      ((Test-Path './package-lock.json') -or (Test-Path './pnpm-lock.yaml') -or (Test-Path './yarn.lock'))
+          if ($hasScript -or $hasNode) {
+            "present=true" >> $env:GITHUB_OUTPUT
+            Write-Host "Build entry point found."
+          } else {
+            "present=false" >> $env:GITHUB_OUTPUT
+            Write-Host "No build entry point yet (scaffolding stage); build-test will be skipped."
+          }
+
+  build-test:
+    name: Build + test
+    needs: detect-build
+    if: needs.detect-build.outputs.present == 'true'
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+
+      - name: Install dependencies (if declared)
+        shell: pwsh
+        run: |
+          if (Test-Path './package-lock.json') {
+            npm ci
+          } else {
+            Write-Host "No package-lock.json; no dependency install."
+          }
+
+      - name: Build
+        shell: pwsh
+        run: ./scripts/build/build.ps1
+
+      - name: Test
+        shell: pwsh
+        run: |
+          if (Test-Path './scripts/build/test.ps1') {
+            ./scripts/build/test.ps1
+          } elseif ((Test-Path './package.json') -and ((Get-Content ./package.json -Raw) -match '"test"\s*:')) {
+            npm test
+          } else {
+            Write-Host "No test entry point yet; skipping."
+          }
