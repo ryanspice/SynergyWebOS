@@ -1,10 +1,16 @@
-# synergy-tv
+# Junction — synergy-tv (working title)
 
-**Working title.** `synergy-tv` is the placeholder name for a clean rebuild of a
-TV-first Synergy experience for LG webOS televisions and a companion dock/app
-switcher. The branded name, visual identity and final repository name are owned
-by the brand decision in [`app/BRAND.md`](app/BRAND.md) (maintained by the app
-owner; the lead finalises the repository name before publication).
+**Junction** (*"Your desk, on the TV."*) is the proposed product name for a clean
+rebuild of a TV-first Synergy experience for LG webOS televisions: a TV app plus
+a companion dock/app switcher that brings your desktop keyboard and mouse to the
+TV through a small, configurable handoff corner.
+
+- Brand, visual identity, app ID proposal and migration notes:
+  [`app/BRAND.md`](app/BRAND.md) (owned by the app workstream and still
+  **proposed**; the lead finalises the name).
+- Repository name `synergy-tv` is a placeholder until the lead renames it, and
+  the package ID remains the existing one for upgrade compatibility — see
+  `app/BRAND.md`.
 
 > Status: **pre-release scaffolding.** This repository is being assembled from
 > the previous prototype workspace. Not every directory described below is

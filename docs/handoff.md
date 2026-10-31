@@ -14,10 +14,25 @@ and the old working area, not in this repository.
 | Home key | `scripts/home/` — Windows key → TV system home, third-party launcher cleanup | Pending report |
 | App | `app/` — branded TV app, client scripts, `BRAND.md` | Pending report |
 | Build/QA | `scripts/build/`, `tests/` — build, package, acceptance checks | Pending report |
-| Repo (this) | Root files, `.github/`, `docs/`, git init and hygiene | Done (initial commit); GitHub steps pending |
+| Repo (this) | Root files, `.github/`, `docs/`, git init and hygiene | Local commits done, no remote; GitHub steps pending |
 
 "Pending report" means the workstream is still being assembled by its delegate.
-Do not assume a folder exists until it is listed in the repository tree.
+Do not assume a folder exists until it is listed in the repository tree, and do
+not modify another workstream's folder from the repository workstream.
+
+## Integration gaps for the lead (read-only observations, 2026-10-31)
+
+- **Brand is proposed:** `app/BRAND.md` proposes *Junction* (display name; repo
+  working name stays `synergy-tv`; the package ID is kept for upgrade
+  compatibility). The README now leads with that pointer; rename the repo only
+  after the lead finalises the name.
+- **Build output location differs from `building.md`:** `scripts/build/` uses
+  `dist/` (ignored), and release packages should go to `dist/release/` as
+  documented. Update `building.md` if the build entry point is renamed.
+- **CI build job detection:** `ci.yml` activates `build-test` when
+  `scripts/build/build.ps1` exists at the repo root — that file now exists, so
+  the job will run once the repository is pushed. Confirm it passes on
+  `windows-latest` before relying on it.
 
 ## Dependencies on the repo workstream
 
