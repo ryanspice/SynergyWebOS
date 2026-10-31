@@ -21,8 +21,8 @@ apply.
 
 | Check | Command | Covers |
 | --- | --- | --- |
-| Repo hygiene | `pwsh ./scripts/check-repo-guards.ps1 -Staged` | No secrets, keys, backups, proprietary bundles, dependency/build junk staged. |
-| Docs links | `pwsh ./scripts/check-docs-links.ps1` | Relative Markdown links resolve. |
+| Repo hygiene | `pwsh ./scripts/check-repo-guards.ps1 -Staged` (CI: no flag = tracked files) | No secrets, keys, backups, proprietary bundles, dependency/build junk staged or tracked. |
+| Docs links | `pwsh ./scripts/check-docs-links.ps1` | Relative Markdown links resolve. While `app/`, `dock/`, `tools/`, `scripts/` and `tests/` are still uncommitted, CI passes `-AllowMissing 'app,dock,tools,scripts,tests'`, which only warns for those prefixes; remove it after integration. |
 | Workflow syntax | `npx --yes yaml-lint .github/workflows/ci.yml .github/dependabot.yml` (optional) | YAML parses and is well formed. |
 
 The optional pre-commit hook (`.githooks/pre-commit`) runs the repo hygiene

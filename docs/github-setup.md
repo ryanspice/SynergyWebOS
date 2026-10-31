@@ -1,8 +1,9 @@
 # GitHub setup — remaining steps
 
-Local repository status at handoff: initialised on `main`, one commit, **no
-remote, no push, no GitHub repository**. Publication is the lead's explicit
-decision (per the brief). Nothing below was executed by the repo workstream.
+Local repository status at handoff: initialised on `main` with two commits
+(`93aa241` initial scaffold, `61bd8bf` guard hardening), **no remote, no push,
+no GitHub repository**. Publication is the lead's explicit decision (per the
+brief). Nothing below was executed by the repo workstream.
 
 ## 0. Prerequisites / decisions before publishing
 
@@ -79,7 +80,12 @@ Not committed by this workstream (separate owners): `BRIEF.md`, `app/`,
 
 ## 5. After the workstreams land
 
-- Commit each workstream's folder (lead) once its report is accepted.
+- Commit each workstream's folder (lead) once its report is accepted. Check
+  before committing: `pwsh ./scripts/check-repo-guards.ps1 -Staged` and
+  `pwsh ./scripts/check-docs-links.ps1`.
+- Once `docs/` links to `app/`, `dock/` and the other folders are committed,
+  remove `-AllowMissing 'app,dock,tools,scripts,tests'` from the CI docs-link
+  step so every link becomes mandatory.
 - Activate the CI build job automatically (it detects `scripts/build/build.ps1`).
 - Add the release process: [`release.md`](release.md).
 - Run the first tagged release only after a recorded live TV/PC acceptance test.

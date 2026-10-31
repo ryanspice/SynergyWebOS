@@ -25,6 +25,10 @@ and `.github/workflows/ci.yml` in the same change.
   `.ipk`).
 - The app is a static webOS app: `appinfo.json` plus static assets; there is no
   Node runtime on the TV.
+- `app/appinfo.json` must declare the fields the TV loader needs (`id`,
+  `version`, `vendor`, `main`, `icon`, `type`) and the icons
+  (`icon`, `largeIcon`, `icon-256.png`, `icon-512.png`) must exist next to it,
+  or `ares-package` and the install will fail.
 
 ## Output rules
 
