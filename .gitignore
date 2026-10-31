@@ -60,11 +60,22 @@ ares-*.json
 webos-meta/
 *.lock.bak
 
-# IDE / OS noise
+# IDE / OS noise, local dev/browser profiles and scratch captures
 .vscode/*
 !.vscode/extensions.json
 !.vscode/settings.recommended.json
 .idea/
+.*-profile*/
+.edge-profile*/
+.preview/
+.pw-profile/
+.playwright-cli/
+# Scratch stdout/stderr captures written by local tooling (e.g. .edge-err.txt)
+.editor-*.txt
+.-*.txt
+.*-out.txt
+.*-err*.txt
+.*-dom.txt
 *.suo
 *.user
 Thumbs.db

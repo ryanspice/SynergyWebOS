@@ -1,16 +1,19 @@
 # Repository CI for synergy-tv.
 #
-# Two jobs:
-#   1. repo-guards  — always runs; no dependency install. Checks the repository
-#                     hygiene rules (no secrets/backups/proprietary files) and
-#                     documentation links.
-#   2. build-test   — runs only once the build workstream has landed
+# Jobs:
+#   1. repo-guards  — always runs; no dependency install. Repository hygiene
+#                     (no secrets/backups/proprietary files) and docs links.
+#   2. detect-build — reports whether a build entry point exists yet.
+#   3. build-test   — runs only once the build workstream has landed
 #                     scripts/build/build.ps1 (or package.json + lockfile).
 #                     It is skipped, not failed, while the repo is scaffolding.
 #
 # Live TV/PC checks are NOT part of CI. They require a rooted TV and the live
-# Synergy server and are recorded manually as maintainer acceptance (see
-# docs/github-setup.md).
+# Synergy server and are recorded as maintainer acceptance (docs/testing.md).
+#
+# While other workstream folders have not landed yet, the docs-link check warns
+# about links into them via -AllowMissing. Once the lead has committed those
+# folders, remove that switch to make every link mandatory.
 
 name: CI
 
@@ -34,8 +37,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
 
       - name: Guard against committed secrets, backups and proprietary bundles
         shell: pwsh
@@ -43,7 +44,7 @@ jobs:
 
       - name: Check documentation links
         shell: pwsh
-        run: ./scripts/check-docs-links.ps1
+        run: ./scripts/check-docs-links.ps1 -AllowMissing 'app,dock,tools,scripts,tests'
 
   detect-build:
     name: Detect build pipeline

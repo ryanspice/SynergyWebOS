@@ -11,26 +11,73 @@
 
     The check is intentionally conservative: a relative target that does not
     exist is reported. Links may point at existing files or (for workstream
-    folders) existing directories. GitHub-style links to not-yet-populated
-    workstream folders are therefore accepted only once the directory exists.
+    folders) existing directories.
 
-    Exit code 0 = all relative links resolve, 1 = at least one broken link.
+    Files are taken from git (`ls-files`, or `ls-tree` for -GitWorkTree) and
+    fall back to a filesystem scan when the tree is not a git checkout.
+
+    Exit code 0 = all required relative links resolve, 1 = at least one broken
+    link.
 
 .PARAMETER Path
-    Repository root. Defaults to the parent of this script's folder.
+    Checker root. Defaults to the parent of this script's folder.
+.PARAMETER AllowMissing
+    Comma-separated repository-relative prefixes (e.g. 'app', 'dock') whose
+    targets may be missing but are only warned about, for folders owned by
+    workstreams that have not landed yet. Pass as a comma-separated string so
+    it works through Windows PowerShell 5.1 and 7:
+      -AllowMissing 'app,dock,scripts'
+    Defaults to empty for a complete repository.
+.PARAMETER GitWorkTree
+    Optional git checkout to list Markdown files from. Paths are read from that
+    commit (default HEAD), so publishing a staged subset can be checked from
+    the working tree. Targets resolve against -Path.
 #>
 [CmdletBinding()]
 param(
-    [string]$Path = (Split-Path -Parent $PSScriptRoot)
+    # Path and GitWorkTree are scalar. AllowMissing is a comma-separated
+    # string rather than [string[]]: with a default plus a trailing array
+    # parameter, a positional array can bind to the wrong parameter, and
+    # Windows PowerShell 5.1 cannot convert an array to a [string] parameter
+    # at all. A comma string is reliable through `pwsh -File` and in 5.1.
+    [string]$Path = (Split-Path -Parent $PSScriptRoot),
+    [string]$GitWorkTree = '',
+    [string]$AllowMissing = ''
 )
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
+$AllowMissingList = @(
+    if (-not [string]::IsNullOrWhiteSpace($AllowMissing)) {
+        $AllowMissing -split ',' | ForEach-Object { $_.Trim().Replace('\', '/').Trim('/') } | Where-Object { $_ } | ForEach-Object { "$_/" }
+    }
+)
+
 $root = (Resolve-Path -LiteralPath $Path).Path
 Push-Location -LiteralPath $root
 try {
-    $files = @(& git @('ls-files', '*.md') 2>$null)
+    $files = @()
+    $gitRoot = if ($GitWorkTree) { (Resolve-Path -LiteralPath $GitWorkTree).Path } else { $root }
+    $gitList = @()
+    & git -C $gitRoot @('rev-parse', '--git-dir') 2>$null | Out-Null
+    if ($LASTEXITCODE -eq 0) {
+        if ($GitWorkTree) {
+            # ls-tree does not reliably apply pathspecs, so filter after listing.
+            $gitList = @(& git -C $gitRoot @('ls-tree', '-r', '--name-only', 'HEAD') 2>$null |
+                    Where-Object { $_ -like '*.md' })
+        }
+        else {
+            $gitList = @(& git @('ls-files', '*.md') 2>$null)
+        }
+    }
+    if ($gitList) {
+        # Paths are relative to $gitRoot; the checker root is $root.
+        $files = @($gitList | Where-Object { $_ } | ForEach-Object {
+                $abs = [System.IO.Path]::GetFullPath([System.IO.Path]::Combine($gitRoot, $_))
+                [System.IO.Path]::GetRelativePath($root, $abs).Replace('\', '/')
+            })
+    }
     if (-not $files -or $files.Count -eq 0) {
         $files = @(Get-ChildItem -Recurse -File -Filter *.md | Where-Object { $_.FullName -notmatch '[\\/]node_modules[\\/]' } | ForEach-Object {
                 [System.IO.Path]::GetRelativePath($root, $_.FullName).Replace('\', '/')
@@ -38,6 +85,7 @@ try {
     }
 
     $broken = [System.Collections.Generic.List[string]]::new()
+    $warned = [System.Collections.Generic.List[string]]::new()
     $linkCount = 0
 
     foreach ($file in $files) {
@@ -69,14 +117,22 @@ try {
                 else {
                     Join-Path (Split-Path -Parent $full) $clean
                 }
-                if (-not (Test-Path -LiteralPath $candidate)) {
-                    $broken.Add("${file}:$($i + 1)  ->  $target")
+                # Filesystem APIs throw on paths whose last segment is > 255
+                # chars; such a candidate is simply reported as missing.
+                $exists = $false
+                try { $exists = Test-Path -LiteralPath $candidate } catch { $exists = $false }
+                if (-not $exists) {
+                    $relTarget = [System.IO.Path]::GetRelativePath($root, [System.IO.Path]::GetFullPath($candidate)).Replace('\', '/').TrimStart('/')
+                    $allowed = @($AllowMissingList | Where-Object { $_ -and $relTarget.StartsWith($_, [System.StringComparison]::Ordinal) }).Count -gt 0
+                    if ($allowed) { $warned.Add("${file}:$($i + 1)  ->  $target  (pending: $relTarget)") }
+                    else { $broken.Add("${file}:$($i + 1)  ->  $target") }
                 }
             }
         }
     }
 
-    Write-Host "check-docs-links: $($files.Count) Markdown file(s), $linkCount relative link(s); $($broken.Count) broken."
+    Write-Host "check-docs-links: $(@($files).Count) Markdown file(s), $linkCount relative link(s); $($broken.Count) broken, $($warned.Count) pending."
+    foreach ($w in $warned) { Write-Host "  $w" -ForegroundColor Yellow }
     if ($broken.Count -gt 0) {
         $broken | ForEach-Object { Write-Host "  $_" }
         exit 1

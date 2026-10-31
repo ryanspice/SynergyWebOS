@@ -37,6 +37,11 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
+function Test-InGitWorkTree {
+    $gitDir = & git @('rev-parse', '--git-dir') 2>$null
+    return ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($gitDir))
+}
+
 function Get-RepoFileList {
     param([switch]$StagedIndex)
     if ($StagedIndex) {
@@ -47,6 +52,26 @@ function Get-RepoFileList {
         $out = & git @('ls-files', '--cached') 2>$null
     }
     return @($out | Where-Object { $_ -and $_.Trim() -ne '' } | ForEach-Object { $_.Trim() })
+}
+
+function Get-WorkTreeFileList {
+    $roots = @('app', 'dock', 'tools', 'scripts', 'tests', 'config', 'docs', '.github',
+        'README.md', 'LICENSE', 'CONTRIBUTING.md', 'SECURITY.md', 'THIRD_PARTY_NOTICES.md',
+        '.gitignore', '.gitattributes', '.editorconfig', '.githooks')
+    $skipDirs = @('node_modules', 'dist', 'coverage', '.svelte-kit', '.vite', 'captures', 'secrets')
+    $list = [System.Collections.Generic.List[string]]::new()
+    foreach ($root in $roots) {
+        if (-not (Test-Path -LiteralPath $root)) { continue }
+        $item = Get-Item -LiteralPath $root -Force
+        if (-not $item.PSIsContainer) { $list.Add($root); continue }
+        foreach ($file in Get-ChildItem -LiteralPath $root -Recurse -File -Force -ErrorAction SilentlyContinue) {
+            $rel = [System.IO.Path]::GetRelativePath((Get-Location).Path, $file.FullName).Replace('\', '/')
+            $segments = $rel -split '/'
+            if (@($segments | Where-Object { $skipDirs -contains $_ }).Count -gt 0) { continue }
+            $list.Add($rel)
+        }
+    }
+    return @($list | Sort-Object)
 }
 
 function Get-FileBlob {
@@ -80,13 +105,15 @@ $nameRules = @(
     @{ Pattern = '(?i)(\.lic|\.license)$'; Reason = 'license key file' },
     @{ Pattern = '(?i)\.(bak|orig|rej|old|save|sav)$|~$'; Reason = 'backup/working copy' },
     @{ Pattern = '(?i)(^|/)backups/'; Reason = 'backup directory' },
-    @{ Pattern = '(?i)(^|/)synergy\.conf$|\.synergy'; Reason = 'Synergy config snapshot' },
+    # Case-sensitive: the repo's own tools/synergy/ folder must stay allowed.
+    @{ Pattern = '(?i)(^|/)synergy\.conf$'; Reason = 'Synergy config snapshot' },
+    @{ Pattern = '(^|/)Synergy/|\.synergy(\.conf)?$'; Reason = 'Synergy config/bundle' },
+    @{ Pattern = '(?i)(^|/)synergy-core'; Reason = 'proprietary Synergy core binary' },
     @{ Pattern = '(?i)(^|/)(db|local)\.json$'; Reason = 'Synergy database snapshot' },
     @{ Pattern = '(?i)\.asar$'; Reason = 'proprietary Electron bundle' },
-    @{ Pattern = '(?i)^(Synergy/|synergy-core)'; Reason = 'proprietary Synergy binary/bundle' },
     @{ Pattern = '(?i)(^|/)node_modules/'; Reason = 'dependency folder' },
     @{ Pattern = '(?i)\.ipk$'; Reason = 'built package (releases live in dist/release or releases/)' },
-    @{ Pattern = '(?i)(^|/)(dist|build|out|coverage|\.svelte-kit|\.vite)/'; Reason = 'build output' },
+    @{ Pattern = '(?i)(^|/)(/?dist|app/build|dock/build|out|coverage|\.svelte-kit|\.vite)/'; Reason = 'build output' },
     @{ Pattern = '(?i)\.(log|pid)$|(^|/)logs/'; Reason = 'log/state file' },
     @{ Pattern = '(?i)(^|/)\.webos/'; Reason = 'webOS CLI device credentials' },
     @{ Pattern = '(?i)(^|/)(secrets|credentials)/'; Reason = 'secret storage' },
@@ -105,7 +132,15 @@ $contentRules = @(
 $binaryExtensions = @('.png', '.jpg', '.jpeg', '.gif', '.webp', '.ico', '.ipk', '.zip', '.wgt', '.woff', '.woff2', '.ttf', '.otf', '.mp4', '.webm')
 
 $violations = [System.Collections.Generic.List[string]]::new()
-$files = Get-RepoFileList -StagedIndex:$Staged
+if (Test-InGitWorkTree) {
+    $files = Get-RepoFileList -StagedIndex:$Staged
+    $mode = if ($Staged) { 'staged index' } else { 'tracked files' }
+}
+else {
+    # No git metadata (e.g. a plain source export): scan the work tree instead.
+    $files = Get-WorkTreeFileList
+    $mode = 'work tree (no git)'
+}
 $checked = 0
 
 foreach ($file in $files) {
@@ -131,7 +166,7 @@ foreach ($file in $files) {
 }
 
 $count = $violations.Count
-Write-Host "repo-guards: scanned $(@($files).Count) path(s), $checked text file(s); $count violation(s)."
+Write-Host "repo-guards: $mode; scanned $(@($files).Count) path(s), $checked text file(s); $count violation(s)."
 if ($count -gt 0) {
     $violations | ForEach-Object { Write-Host "  $_" }
     Write-Host 'Remove the files from the change; do not commit secrets, backups or proprietary bundles.' -ForegroundColor Red
