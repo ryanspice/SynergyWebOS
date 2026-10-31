@@ -83,6 +83,13 @@ jobs:
         with:
           node-version: '22'
 
+      - name: Install webOS CLI for packaging
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path .ares -Force | Out-Null
+          npm install --prefix .ares --no-save --no-package-lock @webos-tools/cli@3.2.6
+          "ARES_CLI_DIR=$((Resolve-Path .ares).Path)" >> $env:GITHUB_ENV
+
       - name: Install dependencies (if declared)
         shell: pwsh
         run: |
