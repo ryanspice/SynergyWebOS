@@ -1,8 +1,8 @@
 # GitHub setup — remaining steps
 
-Local repository status at handoff: initialised on `main` with two commits
-(`93aa241` initial scaffold, `61bd8bf` guard hardening), **no remote, no push,
-no GitHub repository**. Publication is the lead's explicit decision (per the
+Local repository status at handoff: initialised on `main` with three commits
+(`93aa241` initial scaffold, `61bd8bf` guard hardening, `93deb2a` doc follow-up —
+see `git log`), **no remote, no push, no GitHub repository**. Publication is the lead's explicit decision (per the
 brief). Nothing below was executed by the repo workstream.
 
 ## 0. Prerequisites / decisions before publishing
