@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Junction — Synergy protocol client for rooted LG webOS TVs.
+"""SynergyWebOS — Synergy protocol client for rooted LG webOS TVs.
 
 No third-party Python packages are required. The client speaks the classic
 Synergy 1.x wire protocol used by the Synergy core and injects keyboard/mouse
@@ -23,8 +23,8 @@ import threading
 import time
 from typing import Dict, Optional, Set, Tuple
 
-APP_NAME = "Junction"
-APP_VERSION = "0.2.4"
+APP_NAME = "SynergyWebOS"
+APP_VERSION = "0.3.2"
 DEFAULT_PORT = 24800
 PROTOCOL_MAJOR = 1
 PROTOCOL_MINOR = 4
@@ -119,8 +119,16 @@ ALT_KEY_IDS: Dict[int, int] = {
     0xEFE9: 56,   # kKeyAlt_L -> KEY_LEFTALT
     0xEFEA: 100,  # kKeyAlt_R -> KEY_RIGHTALT
 }
+# Windows sends some non-character keys with keyButton 0 and a KeyID only.
+SPECIAL_KEY_IDS: Dict[int, int] = {
+    0xEF09: 15,   # kKeyTab -> KEY_TAB
+}
 ALT_KEY_CODES = (56, 100)
 ALT_HOLD_MS = 5.0
+TAB_KEY = 15
+APP_SWITCH_RUNNING_URI = "luna://com.webos.applicationManager/dev/running"
+APP_SWITCH_FOREGROUND_URI = "luna://com.webos.applicationManager/getForegroundAppInfo"
+APP_SWITCH_EXCLUDE = {"com.webos.app.home"}
 
 # Fallback for the uncommon case where a server sends no usable keyButton.
 ASCII_TO_EVDEV: Dict[int, int] = {
@@ -235,10 +243,10 @@ class UInputBackend(InputBackend):
         logging.info("Using uinput device %s", path)
         # Enable a broad but bounded keyboard range. This is simpler and more
         # compatible across TV kernels than changing capabilities at runtime.
-        self.keyboard = UInputDevice(path, "Junction Keyboard", range(1, 256), None)
+        self.keyboard = UInputDevice(path, "SynergyWebOS Keyboard", range(1, 256), None)
         self.mouse = UInputDevice(
             path,
-            "Junction Mouse",
+            "SynergyWebOS Mouse",
             [BTN_LEFT, BTN_RIGHT, BTN_MIDDLE, BTN_SIDE, BTN_EXTRA],
             [REL_X, REL_Y, REL_WHEEL, REL_HWHEEL],
         )
@@ -250,7 +258,7 @@ class UInputBackend(InputBackend):
                 return candidate
         raise RuntimeError(
             "uinput device not found (/dev/uinput or /dev/input/uinput). "
-            "Run Probe TV in the Junction app. This kernel may need a different input backend."
+            "Run Probe TV in the SynergyWebOS app. This kernel may need a different input backend."
         )
 
     def key(self, code: int, value: int) -> None:
@@ -319,6 +327,15 @@ class SynergyClient:
         self.alt_down: Set[int] = set()
         self.alt_timer: Optional[threading.Timer] = None
         self.alt_released = False
+
+        # Alt+Tab cycles the currently running TV apps without animation.
+        # The cycle list is refreshed when a new Alt hold starts and is reused
+        # for repeated Tab presses during the same hold.
+        self.tab_consumed = False
+        self.cycle_list: list = []
+        self.cycle_index = -1
+        self.cycle_at = 0.0
+        self.cycle_lock = threading.Lock()
 
     def _launch_home(self) -> None:
         params = json.dumps({"id": HOME_APP}, separators=(",", ":"))
@@ -409,7 +426,13 @@ class SynergyClient:
                     return
                 if self.alt_released:
                     self.alt_released = False
+                first = not self.alt_down
                 self.alt_down.add(code)
+                if first:
+                    self.tab_consumed = False
+                    with self.cycle_lock:
+                        self.cycle_list = []
+                        self.cycle_index = -1
                 if self.alt_timer is None and self.running:
                     self.alt_timer = threading.Timer(ALT_HOLD_MS, self._alt_fire)
                     self.alt_timer.daemon = True
@@ -423,6 +446,10 @@ class SynergyClient:
                     if self.alt_released:
                         inject = False
                         self.alt_released = False
+                    self.tab_consumed = False
+                    with self.cycle_lock:
+                        self.cycle_list = []
+                        self.cycle_index = -1
                 elif self.alt_released:
                     inject = False
         if inject:
@@ -431,6 +458,83 @@ class SynergyClient:
                 self.pressed_keys.add(code)
             else:
                 self.pressed_keys.discard(code)
+
+    def _alt_tab(self, reverse: bool) -> bool:
+        with self.home_lock:
+            if not self.alt_down or not self.running:
+                return False
+            # A Tab press means the user is switching apps, not asking for the
+            # five-second Home hold.
+            if self.alt_timer:
+                self.alt_timer.cancel()
+                self.alt_timer = None
+            self.tab_consumed = True
+        threading.Thread(target=self._cycle_app, args=(reverse,), daemon=True).start()
+        return True
+
+    def _luna_json(self, uri: str) -> dict:
+        result = subprocess.run(
+            [LUNA_SEND, "-n", "1", "-f", uri, "{}"],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            timeout=2.0,
+            check=False,
+            text=True,
+        )
+        if result.returncode != 0:
+            raise RuntimeError("luna-send exit %s" % result.returncode)
+        return json.loads(result.stdout)
+
+    def _launch_app(self, app_id: str) -> bool:
+        params = json.dumps({"id": app_id}, separators=(",", ":"))
+        result = subprocess.run(
+            [LUNA_SEND, "-n", "1", "-f", HOME_LAUNCH_URI, params],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=2.5,
+            check=False,
+        )
+        if result.returncode != 0:
+            logging.error("ALT-TAB launch failed: luna-send exit %s", result.returncode)
+            return False
+        return True
+
+    def _cycle_app(self, reverse: bool) -> None:
+        try:
+            target = None
+            with self.cycle_lock:
+                now = time.time()
+                if not self.cycle_list or now - self.cycle_at > 5.0:
+                    running = self._luna_json(APP_SWITCH_RUNNING_URI)
+                    foreground = self._luna_json(APP_SWITCH_FOREGROUND_URI)
+                    items = running.get("running") if isinstance(running, dict) else None
+                    ids = []
+                    for item in items or []:
+                        if not isinstance(item, dict):
+                            continue
+                        app_id = item.get("id") or item.get("appId")
+                        if app_id and app_id not in APP_SWITCH_EXCLUDE and app_id not in ids:
+                            ids.append(app_id)
+                    if not ids:
+                        logging.warning("ALT-TAB: no running apps reported")
+                        return
+                    current = foreground.get("appId") if isinstance(foreground, dict) else None
+                    self.cycle_list = ids
+                    self.cycle_index = ids.index(current) if current in ids else -1
+                    self.cycle_at = now
+                if len(self.cycle_list) == 1:
+                    target = self.cycle_list[0]
+                else:
+                    step = -1 if reverse else 1
+                    self.cycle_index = (self.cycle_index + step) % len(self.cycle_list)
+                    target = self.cycle_list[self.cycle_index]
+                self.cycle_at = now
+            logging.info("ALT-TAB -> %s", target)
+            self._launch_app(target)
+        except (OSError, subprocess.SubprocessError, ValueError, json.JSONDecodeError) as exc:
+            logging.error("ALT-TAB failed: %s", exc)
 
     def write_state(self, state: str) -> None:
         try:
@@ -645,8 +749,15 @@ class SynergyClient:
             return True
 
         if cmd in (b"DKDN", b"DKUP") and len(data) >= 6:
-            key_id, _mods, key_button = struct.unpack("!HHH", data[:6])
+            key_id, mods, key_button = struct.unpack("!HHH", data[:6])
             code = self._linux_key(key_button, key_id)
+            if code == TAB_KEY and (self.alt_down or self.tab_consumed):
+                if cmd == b"DKDN" and self.alt_down:
+                    self._alt_tab(bool(mods & 0x0001))
+                elif cmd == b"DKUP":
+                    self.tab_consumed = False
+                self._send_cmd(b"CNOP")
+                return True
             if code in (125, 126):
                 # Consume both Windows/Super/Meta keys. off mode deliberately
                 # drops them too; no stray modifier event is ever injected.
@@ -672,6 +783,8 @@ class SynergyClient:
                 pass  # Consume repeats; never inject Meta or repeat HOME.
             elif code in ALT_KEY_CODES:
                 pass  # The hold timer, not key repeat, drives Alt-Home.
+            elif code == TAB_KEY and (self.alt_down or self.tab_consumed):
+                pass  # Alt-Tab is an app switch, not Tab input.
             elif code:
                 self.backend.key(code, 2)  # Linux EV_KEY autorepeat value.
                 self.pressed_keys.add(code)
@@ -724,6 +837,8 @@ class SynergyClient:
             return HOME_KEY_IDS[key_id]
         if key_id in ALT_KEY_IDS:
             return ALT_KEY_IDS[key_id]
+        if key_id in SPECIAL_KEY_IDS:
+            return SPECIAL_KEY_IDS[key_id]
         if key_button in EXTENDED_SCANCODES:
             return EXTENDED_SCANCODES[key_button]
         if 0 < key_button < 0x80:
@@ -744,6 +859,10 @@ class SynergyClient:
                 self.alt_timer.cancel()
                 self.alt_timer = None
             self.alt_released = False
+            self.tab_consumed = False
+            with self.cycle_lock:
+                self.cycle_list = []
+                self.cycle_index = -1
         for code in list(self.pressed_keys):
             try:
                 self.backend.key(code, 0)
@@ -770,7 +889,7 @@ def configure_logging(verbose: bool, log_file: Optional[str]) -> None:
 
 
 def parse_args(argv=None):
-    parser = argparse.ArgumentParser(description="Junction: Synergy client for rooted LG webOS TVs")
+    parser = argparse.ArgumentParser(description="SynergyWebOS: Synergy client for rooted LG webOS TVs")
     parser.add_argument("--version", action="version", version="%(prog)s " + APP_VERSION)
     parser.add_argument("--server", required=True, help="Desktop Synergy server hostname/IP")
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
@@ -807,7 +926,7 @@ def main(argv=None) -> int:
             backend = UInputBackend()
         except (OSError, RuntimeError) as exc:
             logging.error("Cannot initialize system input: %s", exc)
-            logging.error("Run Probe TV in the Junction app, or start with --dry-run.")
+            logging.error("Run Probe TV in the SynergyWebOS app, or start with --dry-run.")
             return 2
 
     client = SynergyClient(

@@ -1,4 +1,4 @@
-# Junction TV app
+# SynergyWebOS TV app
 
 A static, 1080p, keyboard/mouse-first webOS shell for a Synergy-compatible
 desktop input link. It includes connection/status, a live client log, a

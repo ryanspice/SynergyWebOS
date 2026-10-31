@@ -164,6 +164,18 @@ $map['app: Alt held for 5 seconds opens system HOME'] = {
     Assert-Match $text '(?s)elif code in ALT_KEY_CODES.*?self\._alt_key' 'Alt events are routed to the hold handler'
     Assert-Match $text '(?s)self\.alt_down\.clear\(\).*?self\.alt_timer' 'release/stop cancels the Alt hold'
 }
+$map['app: Alt+Tab cycles running apps without animation'] = {
+    $py = Join-Path $appDir 'client\client.py'
+    if (-not (Test-Path -LiteralPath $py)) { Block-Test 'client.py missing' }
+    $text = Get-TextFileContent -Path $py
+    Assert-Match $text 'TAB_KEY\s*=\s*15' 'Tab evdev code'
+    Assert-Match $text '0xEF09:\s*15' 'Windows Tab KeyID maps to KEY_TAB'
+    Assert-Match $text 'APP_SWITCH_RUNNING_URI.*dev/running' 'root running-app query'
+    Assert-Match $text '(?s)def _alt_tab.*?self\._cycle_app' 'Alt+Tab starts the cycle'
+    Assert-Match $text '(?s)def _cycle_app.*?self\._launch_app' 'cycle launches the next app'
+    Assert-Match $text 'ALT-TAB ->' 'cycle is logged'
+    Assert-Match $text '(?s)code == TAB_KEY.*?self\._alt_tab' 'Tab while Alt is routed to the switcher'
+}
 $map['app: Windows Super key IDs are consumed as HOME triggers'] = {
     $py = Join-Path $appDir 'client\client.py'
     if (-not (Test-Path -LiteralPath $py)) { Block-Test 'client.py missing' }

@@ -125,7 +125,9 @@ $map['corner: candidate uses 2px percentage intervals, not the broad 15% edge'] 
         Assert-True ($i.Pct -gt 0) ("$($i.Dir) interval must be non-zero (Synergy rejects 0)")
     }
     if (-not ($intervals | Where-Object { $_.Dir -match '(?i)up|down' })) { throw 'no vertical (up/down) edge to the TV: the top-left 2px corner needs it' }
-    if (-not ($intervals | Where-Object { $_.Dir -match '(?i)left|right' })) { throw 'no horizontal (left/right) edge to the TV: the top-left 2px corner needs it' }
+    # A left-edge link to the TV enters on the TV's right edge and causes an
+    # immediate right-edge return; keep the live/candidate configs free of it.
+    if ($text -match '(?im)^\s*left\(\s*0\s*,[^)]*\)\s*=\s*webos-tv') { throw 'left-edge link to the TV is a known insta-return bug' }
     Assert-Match $text '(?i)switchDelay' 'switch delay is configurable in the candidate'
     ('2px intervals: ' + (($intervals | ForEach-Object { "$($_.Dir)=$($_.Pct)%" }) -join ', '))
 }

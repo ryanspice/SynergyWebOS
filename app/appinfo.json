@@ -1,10 +1,10 @@
 {
   "id": "dev.hurrspice.synergywebos",
-  "version": "0.2.4",
-  "vendor": "Hurr Spice",
+  "version": "0.3.2",
+  "vendor": "Ryan Spice-Finnie",
   "type": "web",
   "main": "index.html",
-  "title": "Junction",
+  "title": "SynergyWebOS",
   "icon": "icon.png",
   "largeIcon": "icon-large.png",
   "resolution": "1920x1080",

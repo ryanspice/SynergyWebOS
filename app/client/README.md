@@ -1,4 +1,4 @@
-# Junction client and control contract
+# SynergyWebOS client and control contract
 
 These files are adapted from the previous working TV client. The new app keeps
 the proven Synergy 1.x wire protocol and uinput approach, adds a clean home-key
@@ -101,6 +101,20 @@ stdout and by exit code; the app treats the text as authoritative.
   restart it. Dry-run logs the action instead of launching.
 - The Alt hold is independent of the Windows-key target. `--home-target off`
   still consumes Windows/Super keys, but the Alt escape hatch remains available.
+
+## Alt+Tab app switching
+
+- While Alt is held, a Tab press is consumed and the client asks the TV for
+  `dev/running` plus the current foreground app. It launches the next running
+  app immediately, with no animation.
+- Repeated Tab presses cycle the cached running-app list; Shift+Alt+Tab walks
+  backward. A new Alt hold refreshes the list.
+- Tab presses cancel the five-second Alt-Home hold, so cycling does not open
+  Home by accident.
+- System Home is excluded from the cycle. The dock is a running app and may be
+  included, so Alt+Tab can return to it.
+- If the TV denies `dev/running` or launch, the error is logged and Tab is still
+  consumed rather than leaking into the foreground app.
 
 Terra 3's patch was written against the old client; this file folds in the same
 behaviour with the arguments above. The app passes them as separate process

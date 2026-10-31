@@ -1,8 +1,8 @@
-# TV Dock prototype and integration contract
+# SynergyWebOS Dock — integration contract
 
-A separate, static web app with a bottom dock and app switcher. Junction writes
+A separate, static web app with a bottom dock and app switcher. SynergyWebOS writes
 `catalog.js` before launching it, so the dock shows the same live catalog and
-marks running/foreground apps. The catalog is supplied by Junction's root helper
+marks running/foreground apps. The catalog is supplied by SynergyWebOS's root helper
 because this TV denies third-party `listApps`/`getForegroundAppInfo` calls; the
 dock itself stays unprivileged and only uses the allowed `launch` call. If opened
 from the TV launcher without a fresh catalog, it shows the last catalog or an
@@ -18,10 +18,10 @@ The app tries `listLaunchPoints`, then `listApps` as catalog fallback; queries `
 ## Integration decision
 
 **Implemented first integration:** the directory is packaged as a standalone
-card app (`dev.hurrspice.tvdock`) and Junction's **Launch dock** button refreshes
+card app (`dev.hurrspice.tvdock`) and SynergyWebOS's **Launch dock** button refreshes
 `catalog.js` through the root helper before launching it. This keeps the TV's
 application-manager ACL out of the dock: the privileged catalog read stays in
-Junction, while the dock only calls the permitted `launch` method. The standalone
+SynergyWebOS, while the dock only calls the permitted `launch` method. The standalone
 card still replaces the foreground app; it does not remain visible over another
 app. Autohide hides UI inside its own window, not its window or input capture.
 

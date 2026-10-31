@@ -22,7 +22,7 @@ not modify another workstream's folder from the repository workstream.
 
 ## Integration gaps for the lead (read-only observations, 2026-10-31)
 
-- **Brand is proposed:** `app/BRAND.md` proposes *Junction* (display name; repo
+- **Brand is proposed:** `app/BRAND.md` proposes *SynergyWebOS* (display name; repo
   working name stays `synergy-tv`; the package ID is kept for upgrade
   compatibility). The README now leads with that pointer; rename the repo only
   after the lead finalises the name.

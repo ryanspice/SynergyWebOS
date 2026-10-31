@@ -11,17 +11,17 @@ Read before acting: `README.md`, `docs/building.md`, `docs/testing.md`,
 
 | | |
 | --- | --- |
-| Artifact | `dist/synergy-tv-app-0.2.4.ipk` (gitignored `dist/`) |
-| Size | 68,958 bytes (13 staged payload files) |
-| **SHA-256** | **`2dfba091f46cd859d3915af277cc3c6539ca77ad0ae27229745aa4509e8c4e91`** |
-| Sidecar | `dist/synergy-tv-app-0.2.4.ipk.sha256` |
+| Artifact | `dist/synergy-tv-app-0.3.2.ipk` (gitignored `dist/`) |
+| Size | 70,184 bytes (13 staged payload files) |
+| **SHA-256** | **`44005d565ecfbc31422f491826e7ddfe922c75981b30a7945a01c780c5e4d6df`** |
+| Sidecar | `dist/synergy-tv-app-0.3.2.ipk.sha256` |
 | Receipt | `dist/build-info.json` (status `PASS`, same hash, tool versions) |
-| Package ID / version | `dev.hurrspice.synergywebos` / `0.2.4` (upgrade over installed 0.1.8) |
-| Companion dock | `dist/synergy-tv-dock-0.2.3.ipk` (`dev.hurrspice.tvdock`) |
+| Package ID / version | `dev.hurrspice.synergywebos` / `0.3.2` (upgrade over installed 0.1.8) |
+| Companion dock | `dist/synergy-tv-dock-0.3.0.ipk` (`dev.hurrspice.tvdock`) |
 | Payload | `index.html`, `appinfo.json`, `js/app.js`, `js/core.js`, `css/app.css`, `assets/mark.svg`, `contracts/handoff-profile.schema.json`, `client/{client.py,probe.py,tvctl.sh}`, `icon.png`, `icon-large.png`, `icon-256.png`, `webos-meta/synergy-tv-build.json` |
 
-Verify: `Get-FileHash dist/synergy-tv-app-0.2.4.ipk -Algorithm SHA256` must equal the
-sidecar. `ares-package -i` reports `Package: dev.hurrspice.synergywebos`, `Version: 0.2.4`,
+Verify: `Get-FileHash dist/synergy-tv-app-0.3.2.ipk -Algorithm SHA256` must equal the
+sidecar. `ares-package -i` reports `Package: dev.hurrspice.synergywebos`, `Version: 0.3.2`,
 `Architecture: all`.
 
 Earlier builds of the same source produced `2f062a4a…` (98,242 B) and `93de40ea…`

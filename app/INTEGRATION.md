@@ -1,4 +1,4 @@
-# Junction integration contract
+# SynergyWebOS integration contract
 
 This document is the handoff between the app scope (`app/**`) and the other
 workstreams. The lead owns final merge, live apply, TV install and acceptance.
@@ -153,7 +153,7 @@ passes them as `--home-target` and `--home-delay-ms` on the next client start.
 The root helper must resolve the packaged `client/tvctl.sh`, not a package-root
 `tvctl.sh`. Keep `requiredACG` containing `lunabus.query`; the acceptance suite
 checks both. The TV denies application-manager queries to unprivileged apps, so
-Junction reads the app catalog/running list through the root helper and feeds the
+SynergyWebOS reads the app catalog/running list through the root helper and feeds the
 dock's `catalog.js`. The dock remains unprivileged.
 
 This folds in the intent of `scripts/home/client-home.patch`; reconcile names
@@ -175,7 +175,7 @@ service exit code is not visual proof.
 
 - Source root: `app/`
 - Package ID: `dev.hurrspice.synergywebos` (upgrade-compatible; see `BRAND.md`)
-- Version: `0.2.4`
+- Version: `0.3.2`
 - Entry: `index.html`
 - Icons: `icon.png`, `icon-large.png`
 - Permissions: `lunabus.query`, `network.query`, `application.launcher`
@@ -205,10 +205,10 @@ command, output name, hash and release artifact.
 
 1. Coordinate a quiet window; stop the live client first so the installed files
    are not replaced underneath a running process.
-2. Install the new IPK over the same ID (version 0.2.4 > 0.1.8).
+2. Install the new IPK over the same ID (version 0.3.2 > 0.1.8).
 3. Keep the desktop screen name and current Synergy config unchanged for the
    first launch.
-4. Open Junction, run **Probe TV**, confirm root + writable uinput.
+4. Open SynergyWebOS, run **Probe TV**, confirm root + writable uinput.
 5. Start the link from the saved host/port/name; verify pointer/keyboard.
 6. Verify Windows key behavior for both targets, then enable autostart only
    after the link is proven. Confirm the old autostart hook was quarantined or

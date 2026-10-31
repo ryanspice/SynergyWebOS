@@ -5,8 +5,8 @@
 
   var APP = {
     id: 'dev.hurrspice.synergywebos',
-    version: '0.2.4',
-    name: 'Junction',
+    version: '0.3.2',
+    name: 'SynergyWebOS',
     dockAppId: 'dev.hurrspice.tvdock',
     serverApiPort: 24803
   };
@@ -316,7 +316,7 @@
       'if [ -f "$D/client/tvctl.sh" ]; then BASE="$D"; TVCTL="$D/client/tvctl.sh"; break; fi; ' +
       'if [ -f "$D/tvctl.sh" ]; then BASE="$D"; TVCTL="$D/tvctl.sh"; break; fi; ' +
       'done; ' +
-      'if [ -z "$TVCTL" ]; then echo "Junction client control script not found" >&2; exit 127; fi; ' +
+      'if [ -z "$TVCTL" ]; then echo "SynergyWebOS client control script not found" >&2; exit 127; fi; ' +
       'exec sh "$TVCTL" ' + args;
   }
 
@@ -340,7 +340,7 @@
       'home_target=' + demo.homeTarget,
       'home_delay_ms=' + demo.homeDelayMs,
       '===LOG===',
-      '2026-10-31 03:14:02 INFO Starting Junction client 0.2.4',
+      '2026-10-31 03:14:02 INFO Starting Junction client 0.3.2',
       '2026-10-31 03:14:02 INFO Connecting to ' + host + ':' + port + ' as webos-tv',
       '2026-10-31 03:14:02 INFO TCP connected; waiting for Synergy handshake',
       '2026-10-31 03:14:02 INFO Server protocol Synergy 1.4',

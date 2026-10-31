@@ -1,6 +1,6 @@
-# Junction — synergy-tv
+# SynergyWebOS by Ryan Spice-Finnie
 
-**Junction** (*"Your desk, on the TV."*) is a TV-first Synergy experience for LG
+**SynergyWebOS** (*"Your desk, on the TV."*) is a TV-first Synergy experience for LG
 webOS televisions: a TV app plus a companion dock/app switcher that brings your
 desktop keyboard and mouse to the TV through a small, configurable handoff
 corner.
@@ -10,10 +10,10 @@ corner.
 - The repository name `synergy-tv` is retained; the package ID remains the
   existing one for upgrade compatibility.
 
-> Status: **working local build.** Junction `0.2.4` and TV Dock `0.2.3` are
-> packaged, installed and exercised on the target TV; the desktop Synergy config
-> uses a two-pixel top-left handoff and zero switch delay. Physical acceptance is
-> recorded in [`app/REPORT.md`](app/REPORT.md) and
+> Status: **working local build.** SynergyWebOS `0.3.2` and SynergyWebOS Dock
+> `0.3.0` are packaged, installed and exercised on the target TV; the desktop
+> Synergy config uses a two-pixel top-left handoff and zero switch delay.
+> Physical acceptance is recorded in [`app/REPORT.md`](app/REPORT.md) and
 > [`docs/testing.md`](docs/testing.md). No remote/push is configured.
 
 ## What it is meant to be
@@ -23,7 +23,7 @@ corner.
   home-key target and handoff settings. See [`app/`](app/) and
   [`app/BRAND.md`](app/BRAND.md).
 - **TV dock / app switcher** — an autohide taskbar for switching between open
-  TV apps. Junction supplies the live catalog (open apps first); the standalone
+  TV apps. SynergyWebOS supplies the live catalog (open apps first); the standalone
   dock is intentionally unprivileged. See [`dock/`](dock/).
 - **Handoff configuration tooling** — a small, configurable hot corner that
   hands control to the TV, plus Synergy 3 server/config/API helpers. See

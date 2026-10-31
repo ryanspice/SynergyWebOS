@@ -1,10 +1,10 @@
 {
   "id": "dev.hurrspice.tvdock",
-  "version": "0.2.3",
-  "vendor": "Hurr Spice",
+  "version": "0.3.0",
+  "vendor": "Ryan Spice-Finnie",
   "type": "web",
   "main": "index.html",
-  "title": "TV Dock",
+  "title": "SynergyWebOS Dock",
   "icon": "icon.png",
   "resolution": "1920x1080",
   "disableBackHistoryAPI": true,

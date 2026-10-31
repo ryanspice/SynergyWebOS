@@ -2,9 +2,19 @@
 
 ## Status and acceptance
 
-**Not accepted as a proven 2×2 square.** `candidate.conf` is a test candidate, not a live change. The core accepted its syntax on 127.0.0.1:24999 with the specified server name; no client was connected and no mouse was moved. Edge intervals specify a position along an edge; they do not specify a two-dimensional interior dwell region. The two candidate links cover the first nominal 2 pixels of each adjoining edge. They do not establish activation when the pointer is merely inside a 2×2 square. The exact pixel rounding, Windows virtual-desktop coordinates, display scaling, fast pointer motion, and top-left arbitration need a controlled runtime test. If the requirement means any movement within an interior 2×2 square, this config alone has not shown it can meet that requirement.
+**Live config is a top-edge 2px strip, not a true 2×2 square.** The earlier
+`left(0,0.0925925926)` link was removed after a live bug: it entered the TV on its
+right edge, so ordinary rightward mouse motion immediately returned to the PC and
+the TV appeared to have no cursor. The live config now uses only
+`up(0,0.0520833333)` to enter the TV and `right(70,100)` to return. It was applied
+through `POST /v1/custom/settings` with a protected before-image and tested at
+the physical PC.
 
-At the observed 3840×2160 resolution, 2/3840×100 = 0.0520833333% and 2/2160×100 = 0.0925925926%. The candidate adds both up and left edge intervals, retaining the existing Spice-Book left link and TV return links. Rounding and 3840×2160 as the actual Synergy screen bounds remain unverified. If only upward exit is desired, remove the first left link. `switchCorners` denotes disabled/dead corners, not a positive hot-corner selector; current setting `none` leaves corners enabled. `switchCornerSize` controls dead-corner size in pixels, and should not be used as a 2-pixel activation selector. See Symless documentation: https://support.symless.com/hc/en-us/articles/51545587360273-Synergy-1-server-options-dead-corners-cursor-lock-clipboard-and-switching . Version differences remain possible.
+At 3840×2160, 2/3840×100 = 0.0520833333%. The exact pixel rounding, Windows
+virtual-desktop coordinates, display scaling, fast pointer motion, and top-left
+corner arbitration remain user-acceptance details. `switchCorners` denotes
+disabled/dead corners, not a positive hot-corner selector; current `none` leaves
+corners enabled. `switchCornerSize` is not a 2px activation selector.
 
 ## Evidence
 

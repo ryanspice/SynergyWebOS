@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Junction capability probe.
+"""SynergyWebOS capability probe.
 
 Read-only with respect to input: it opens and immediately closes uinput when
 accessible, but never creates a virtual input device and never injects an event.
@@ -10,8 +10,8 @@ import os
 import platform
 import sys
 
-APP_NAME = "Junction"
-APP_VERSION = "0.2.4"
+APP_NAME = "SynergyWebOS"
+APP_VERSION = "0.3.2"
 HOME_APP = "com.webos.app.home"
 LUNA_SEND = "/usr/bin/luna-send"
 

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "junction.handoff.v1",
-  "title": "Junction desktop handoff profile",
+  "title": "SynergyWebOS desktop handoff profile",
   "description": "Portable description of the 2x2 top-left handoff and its delay/override. The TV app exports this file; a desktop helper or the lead applies it to Synergy after review. This file does not change a live server by itself.",
   "type": "object",
   "additionalProperties": false,

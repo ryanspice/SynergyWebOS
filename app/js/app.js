@@ -408,7 +408,7 @@
     J.saveSettings(state.settings);
     if (state.busy) return Promise.resolve(false);
     setBusy(true);
-    setFormMessage(opts.auto ? 'Connecting with saved details…' : 'Starting the Junction client…', '');
+    setFormMessage(opts.auto ? 'Connecting with saved details…' : 'Starting the SynergyWebOS client…', '');
     var wasRunning = Boolean(state.snapshot && state.snapshot.running);
     return J.startClient(state.settings, { restart: wasRunning }).then(function (result) {
       var output = String((result && result.output) || '');
@@ -1205,7 +1205,7 @@
       if (els.appsHint) els.appsHint.textContent = 'TV services unavailable';
       renderApps();
       renderHomeApps();
-      if (els.logView) els.logView.textContent = 'This is a browser preview. Open Junction on the TV to read the client status and log.';
+      if (els.logView) els.logView.textContent = 'This is a browser preview. Open SynergyWebOS on the TV to read the client status and log.';
       if (els.autostartBadge) els.autostartBadge.textContent = 'Unavailable';
       if (els.autostartNote) els.autostartNote.textContent = 'Autostart needs the TV root helper.';
       if (els.rootState) els.rootState.textContent = 'Preview only';

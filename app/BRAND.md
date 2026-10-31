@@ -1,27 +1,26 @@
-# Junction — brand and migration
+# SynergyWebOS — brand and migration
 
-**Status:** proposed for the new app build. The lead owns the final repository
-name, package deployment and any public release. This file owns the app name,
-visual language and package-identity recommendation.
+**Status:** adopted for the `0.3.2` build by **Ryan Spice-Finnie**. The package
+ID stays `dev.hurrspice.synergywebos` for in-place upgrade; the display name and
+vendor change.
 
 ## 1. Name
 
-**Junction** — the point where the desktop's keyboard and mouse meet the TV, and
-where the TV's apps come together in one switcher. It also names the tiny
-corner where control hands off. It is short, unambiguous at a distance, easy to
-say, and does not reuse the Synergy product name.
+**SynergyWebOS** is the TV-first Synergy experience: the point where the
+desktop keyboard and mouse meet the TV, and where the TV's apps come together in
+one switcher.
 
-- Display name: **Junction**
-- Wordmark: `JUNCTION` in wide uppercase tracking
+- Display name: **SynergyWebOS**
+- Credit: **by Ryan Spice-Finnie**
+- Wordmark: `SYNERGYWEBOS` in wide uppercase tracking
 - Tagline: **Your desk, on the TV.**
 - Product line: *Desktop input for TV*
-- Repository working name: `synergy-tv` (lead decides the final name)
-- Pronunciation: JUNK-shun
+- Repository name: `synergy-tv`
+- Vendor: **Ryan Spice-Finnie**
 
-"Junction" is a common English word and may be used by unrelated products. This
-is a personal, unofficial app; the lead should run a normal name/trademark check
-before any public release. If a public identity is ever needed, the package ID
-can stay stable while the display name changes.
+This is a personal, unofficial app. “Synergy” is a trademark of Symless Ltd.;
+this project is not affiliated with or endorsed by Symless or LG. The package ID
+can stay stable while the display name evolves.
 
 ## 2. Visual identity
 
@@ -122,9 +121,9 @@ Reasons:
 The package metadata in [`appinfo.json`](appinfo.json) is therefore:
 
 - id: `dev.hurrspice.synergywebos`
-- title: `Junction`
-- version: `0.2.4`
-- vendor: `Hurr Spice`
+- title: `SynergyWebOS`
+- version: `0.3.2`
+- vendor: `Ryan Spice-Finnie`
 
 A new ID is justified only for a true fork, a different publisher, or an app
 that must coexist with this one. In that case use a new reverse-DNS ID owned by
@@ -142,7 +141,7 @@ ID for unrelated software.
 3. Keep the Synergy screen name `webos-tv` until the desktop configuration is
    deliberately changed. Renaming the screen without updating the desktop breaks
    the link.
-4. Open Junction and run **Probe TV**. Start a link only after root + uinput
+4. Open SynergyWebOS and run **Probe TV**. Start a link only after root + uinput
    are reported ready.
 
 ### Settings
@@ -150,7 +149,7 @@ ID for unrelated software.
 - The app reads its own key `junction.settings.v1`.
 - On first run it migrates only the connection fields from the previous build's
   `synergy-webos-settings` browser key. Launcher-specific options from the old
-  build are intentionally dropped because Junction has no third-party launcher
+  build are intentionally dropped because SynergyWebOS has no third-party launcher
   coupling.
 - Home target, hold delay and handoff profile start at safe defaults:
   system HOME, 0 ms hold, 2 × 2 corner profile enabled, 250 ms switch delay.
@@ -186,6 +185,6 @@ autostart. The repository contains no backups or device data.
 All visual assets in `app/` are original to this project: `assets/mark.svg`,
 the generated PNG icons and the CSS-only UI. No third-party logos, icon packs,
 fonts or launcher assets are redistributed. "Synergy" is a trademark of Symless
-Ltd.; Junction is an independent, unofficial client. "LG" and "webOS" are
+Ltd.; SynergyWebOS is an independent, unofficial client. "LG" and "webOS" are
 trademarks of LG Electronics. See the repository `LICENSE` and
 `THIRD_PARTY_NOTICES.md` for the repository-level terms.
