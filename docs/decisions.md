@@ -64,12 +64,13 @@ Newest first. Each entry: id, date, decision, owner, review condition.
 ## D-005 — Root GitHub location, no remote created
 
 - **Date:** 2026-10-31
-- **Context:** `B:\` and `B:\Dev` are not repositories. `synergy-tv` must be
-  its own repository, not a subfolder of another one.
-- **Decision:** `git init -b main` inside `B:\Dev\webos\synergy-tv`. No remote,
-  no push, no credentials used, no GitHub repository created (publication
-  requires explicit authorisation). Verification: `git rev-parse
-  --show-toplevel` returns `B:/Dev/webos/synergy-tv`.
+- **Context:** the parent drive and dev folders are not repositories. `synergy-tv`
+  must be its own repository, not a subfolder of one. (The enclosing drive root
+  does contain an unrelated bare-ish repository; it is not used or touched.)
+- **Decision:** a fresh `git init -b main` in this folder. No remote, no push,
+  no credentials used, no GitHub repository created (publication requires
+  explicit authorisation). Verification: `git rev-parse --show-toplevel` returns
+  this folder.
 - **Owner:** lead (push).
 
 ## D-006 — Default branch `main`, conventional but short commit style
