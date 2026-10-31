@@ -1,0 +1,14 @@
+{
+  "id": "dev.hurrspice.synergywebos",
+  "version": "0.2.4",
+  "vendor": "Hurr Spice",
+  "type": "web",
+  "main": "index.html",
+  "title": "Junction",
+  "icon": "icon.png",
+  "largeIcon": "icon-large.png",
+  "resolution": "1920x1080",
+  "disableBackHistoryAPI": true,
+  "noSplashOnLaunch": true,
+  "requiredACG": ["lunabus.query", "network.query", "application.launcher"]
+}

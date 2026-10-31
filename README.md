@@ -12,9 +12,11 @@ TV through a small, configurable handoff corner.
   the package ID remains the existing one for upgrade compatibility — see
   `app/BRAND.md`.
 
-> Status: **pre-release scaffolding.** This repository is being assembled from
-> the previous prototype workspace. Not every directory described below is
-> populated yet, and nothing here has been deployed to the live TV or PC.
+> Status: **working local build.** Junction `0.2.4` and TV Dock `0.2.3` are
+> packaged, installed and exercised on the target TV; the desktop Synergy config
+> uses a two-pixel top-left handoff and zero switch delay. Physical acceptance is
+> recorded in [`app/REPORT.md`](app/REPORT.md) and
+> [`docs/testing.md`](docs/testing.md). No remote/push is configured.
 
 ## What it is meant to be
 
@@ -23,12 +25,14 @@ TV through a small, configurable handoff corner.
   home-key target and handoff settings. See [`app/`](app/) and
   [`app/BRAND.md`](app/BRAND.md).
 - **TV dock / app switcher** — an autohide taskbar for switching between open
-  TV apps, independent of any third-party home screen. See [`dock/`](dock/).
+  TV apps. Junction supplies the live catalog (open apps first); the standalone
+  dock is intentionally unprivileged. See [`dock/`](dock/).
 - **Handoff configuration tooling** — a small, configurable hot corner that
   hands control to the TV, plus Synergy 3 server/config/API helpers. See
   [`tools/synergy/`](tools/synergy/).
-- **Home-key handling** — the Windows key returns to the TV's own system home
-  screen, not to another app. See [`scripts/home/`](scripts/home/).
+- **Home-key and escape handling** — the Windows key returns to the TV's own
+  system home screen; holding either Alt key for five seconds does the same.
+  See [`scripts/home/`](scripts/home/).
 - **Build and test pipeline** — reproducible webOS package build and the
   acceptance checks. See [`scripts/build/`](scripts/build/) and
   [`tests/`](tests/).
@@ -47,9 +51,8 @@ TV through a small, configurable handoff corner.
 | `.github/` | CI workflows, issue/PR templates | repo owner |
 | `BRIEF.md` | Internal working brief for the rebuild | lead |
 
-Directories that are not yet populated are documented here on purpose; they are
-created by their owning workstream. Do not create placeholder files in another
-owner's directory.
+All workstream directories are populated. `BRIEF.md` is an internal working
+brief and is intentionally untracked; it is not part of the public package.
 
 ## Requirements
 
@@ -75,9 +78,9 @@ git config core.hooksPath .githooks
 pwsh ./scripts/build/build.ps1 -DryRun
 ```
 
-The build and test entry points live in `scripts/build/` and are owned by the
-build workstream. Until they land, see [`docs/building.md`](docs/building.md)
-for the intended interface.
+The build and test entry points are `scripts/build/build.ps1` and
+`tests/lib/Run-Tests.ps1`; see [`docs/building.md`](docs/building.md) for the
+deploy and acceptance sequence.
 
 ## Repository hygiene
 

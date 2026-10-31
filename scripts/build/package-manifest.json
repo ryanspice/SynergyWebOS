@@ -1,0 +1,38 @@
+{
+  "$comment": "Build/package manifest for the synergy-tv TV app (owner: Flash-off 2). These are build-owned inputs; they never override app/ source (see scripts/build/README.md). Every non-app override is appended to dist/build-info.json so the artifact is reproducible and auditable.",
+  "appDir": "app",
+  "appinfo": "app/appinfo.json",
+  "artifactName": "synergy-tv-app",
+  "excludeComment": "icon-512.png is documentation/store-only per app/BRAND.md and referenced by no runtime file; it stays in the repo but is not packaged (reviewed Flash-off 2, 2026-10-31).",
+  "exclude": [
+    "*.md",
+    "*.bak",
+    "*.bak.*",
+    "node_modules",
+    ".git",
+    ".DS_Store",
+    "__pycache__",
+    "*.pyc",
+    "*.pyo",
+    "icon-512.png",
+    "tests",
+    "scripts",
+    "src/**/*.map"
+  ],
+  "buildOverrides": {
+    "webos-meta/synergy-tv-build.json": {
+      "$comment": "Marker proving pipeline staging ran; small and harmless at runtime.",
+      "pipeline": "scripts/build/build.ps1",
+      "builtUtc": "<set-at-build>",
+      "sourceVersion": "<set-at-build>"
+    }
+  },
+  "targets": {
+    "$comment": "Static compatibility floor claimed by this repo. The pipeline FAILS on JS/CSS features newer than targetChromium in app/.",
+    "webos": ">=22 (Chromium 87)",
+    "targetChromium": 87,
+    "testedChromium": 132,
+    "testedWebos": "26",
+    "resolution": "1920x1080"
+  }
+}

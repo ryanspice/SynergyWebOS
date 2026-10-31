@@ -1,0 +1,137 @@
+--- a/client.py
++++ b/client.py
+@@ -19,6 +19,7 @@
+ import struct
+ import sys
+ import time
++import threading
+ from typing import Dict, Optional, Set, Tuple
+ 
+ APP_NAME = "Synergy webOS"
+@@ -263,7 +264,9 @@
+ 
+ class SynergyClient:
+     def __init__(self, host: str, port: int, name: str, width: int, height: int,
+-                 backend: InputBackend, once: bool = False) -> None:
++                 backend: InputBackend, once: bool = False,
++                 home_target: str = "system", home_delay_ms: int = 0,
++                 home_dry_run: bool = False) -> None:
+         self.host = host
+         self.port = port
+         self.name = name
+@@ -279,6 +282,52 @@
+         self.pressed_keys: Set[int] = set()
+         self.pressed_buttons: Set[int] = set()
+         self.protocol_name = b"Synergy"
++        self.home_target = home_target
++        self.home_delay_ms = home_delay_ms
++        self.home_dry_run = home_dry_run
++        self.home_down: Set[int] = set()
++        self.home_timer = None
++        self.home_lock = threading.Lock()
++
++    def _home_fire(self) -> None:
++        with self.home_lock:
++            if not self.home_down or not self.running:
++                return
++            if self.home_dry_run:
++                logging.info("DRY RUN: HOME action")
++                return
++            payload = b"type:button\nname:HOME\n\n"
++            try:
++                with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
++                    sock.settimeout(0.5)
++                    sock.connect("/tmp/netinput.pointer.sock")
++                    sock.sendall(struct.pack("!I", len(payload)) + payload)
++                logging.info("HOME frame sent")
++            except OSError as exc:
++                logging.error("HOME action failed: %s", exc)
++
++    def _home_key(self, code: int, down: bool) -> None:
++        fire_now = False
++        with self.home_lock:
++            if down:
++                if code in self.home_down:
++                    return
++                first = not self.home_down
++                self.home_down.add(code)
++                if first and self.home_target == "system":
++                    if self.home_delay_ms == 0:
++                        fire_now = True
++                    else:
++                        self.home_timer = threading.Timer(self.home_delay_ms / 1000.0, self._home_fire)
++                        self.home_timer.daemon = True
++                        self.home_timer.start()
++            else:
++                self.home_down.discard(code)
++                if not self.home_down and self.home_timer:
++                    self.home_timer.cancel()
++                    self.home_timer = None
++        if fire_now:
++            self._home_fire()
+ 
+     def write_state(self, state: str) -> None:
+         try:
+@@ -488,7 +537,9 @@
+         if cmd in (b"DKDN", b"DKUP") and len(data) >= 6:
+             key_id, _mods, key_button = struct.unpack("!HHH", data[:6])
+             code = self._linux_key(key_button, key_id)
+-            if code:
++            if code in (125, 126):
++                self._home_key(code, cmd == b"DKDN")
++            elif code:
+                 down = 1 if cmd == b"DKDN" else 0
+                 self.backend.key(code, down)
+                 if down:
+@@ -503,7 +554,9 @@
+         if cmd == b"DKRP" and len(data) >= 8:
+             key_id, _mods, _count, key_button = struct.unpack("!HHHH", data[:8])
+             code = self._linux_key(key_button, key_id)
+-            if code:
++            if code in (125, 126):
++                pass  # Consume repeats; never inject Meta.
++            elif code:
+                 self.backend.key(code, 2)  # Linux EV_KEY autorepeat value.
+                 self.pressed_keys.add(code)
+             self._send_cmd(b"CNOP")
+@@ -559,6 +612,11 @@
+         return ASCII_TO_EVDEV.get(key_id)
+ 
+     def _release_all(self) -> None:
++        with self.home_lock:
++            self.home_down.clear()
++            if self.home_timer:
++                self.home_timer.cancel()
++                self.home_timer = None
+         for code in list(self.pressed_keys):
+             try:
+                 self.backend.key(code, 0)
+@@ -594,6 +652,8 @@
+     parser.add_argument("--dry-run", action="store_true", help="Log input instead of touching /dev/uinput")
+     parser.add_argument("--once", action="store_true", help="Exit after the first completed server session")
+     parser.add_argument("--verbose", action="store_true")
++    parser.add_argument("--home-target", choices=("system", "off"), default="system")
++    parser.add_argument("--home-delay-ms", type=int, default=0, help="Hold time before HOME, 0..5000 ms")
+     parser.add_argument("--log-file")
+     return parser.parse_args(argv)
+ 
+@@ -605,6 +665,9 @@
+         raise SystemExit("port must be 1..65535")
+     if not (1 <= args.width <= 65535 and 1 <= args.height <= 65535):
+         raise SystemExit("width/height must fit Synergy's 16-bit screen info fields")
++
++    if not 0 <= args.home_delay_ms <= 5000:
++        raise SystemExit("home-delay-ms must be 0..5000")
+ 
+     backend: InputBackend
+     if args.dry_run:
+@@ -618,7 +681,8 @@
+             logging.error("Run the app's Probe TV action, or start with --dry-run.")
+             return 2
+ 
+-    client = SynergyClient(args.server, args.port, args.name, args.width, args.height, backend, args.once)
++    client = SynergyClient(args.server, args.port, args.name, args.width, args.height, backend, args.once,
++                           args.home_target, args.home_delay_ms, args.dry_run)
+ 
+     def on_signal(signum, _frame):
+         logging.info("Stopping on signal %d", signum)

@@ -1,0 +1,577 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="theme-color" content="#070b10" />
+  <title>Junction — desktop input for TV</title>
+  <link rel="icon" type="image/svg+xml" href="assets/mark.svg" />
+  <link rel="stylesheet" href="css/app.css" />
+</head>
+<body>
+  <svg class="sprite" aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg">
+    <symbol id="i-home" viewBox="0 0 24 24"><path d="M3.5 10.5 12 3.5l8.5 7v9a1 1 0 0 1-1 1h-5v-6h-5v6h-5a1 1 0 0 1-1-1z"/></symbol>
+    <symbol id="i-link" viewBox="0 0 24 24"><path d="M9.5 14.5 14.5 9.5M7 17l-1 1a3.54 3.54 0 0 1-5-5l4-4a3.54 3.54 0 0 1 5 0M17 7l1-1a3.54 3.54 0 0 1 5 5l-4 4a3.54 3.54 0 0 1-5 0"/></symbol>
+    <symbol id="i-apps" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h2M10 17h10M14 4v6M8 14v6"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4.5 20 12 7 19.5z"/></symbol>
+    <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1.5"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></symbol>
+    <symbol id="i-probe" viewBox="0 0 24 24"><path d="M4 12h4l2.5-6 3 12 2.5-6h4"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+    <symbol id="i-external" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m4 12.5 5 5L20 6.5"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3 2.5 20h19zM12 9v5M12 17.5v.5"/></symbol>
+    <symbol id="i-keyboard" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M6 9h.01M10 9h.01M14 9h.01M18 9h.01M6 13h.01M10 13h.01M14 13h.01M18 13h.01M7 16.5h10"/></symbol>
+    <symbol id="i-dock" viewBox="0 0 24 24"><rect x="2.5" y="4" width="19" height="12" rx="2"/><path d="M8 20h8M12 16v4"/><path d="M6 12.5h3M11 12.5h3M16 12.5h2"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></symbol>
+    <symbol id="i-power" viewBox="0 0 24 24"><path d="M12 3v9M6.3 6.3a8 8 0 1 0 11.4 0"/></symbol>
+  </svg>
+
+  <div class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="#home" aria-label="Junction home">
+        <svg class="brand-mark" viewBox="0 0 64 64" aria-hidden="true">
+          <rect width="64" height="64" rx="15" fill="#0d141b"/>
+          <rect x="12" y="12" width="18" height="18" rx="4" fill="#ffb35c"/>
+          <rect x="34" y="12" width="18" height="18" rx="4" fill="#e8f1f5"/>
+          <rect x="12" y="34" width="18" height="18" rx="4" fill="#56d9c3"/>
+          <rect x="34" y="34" width="18" height="18" rx="4" fill="#243440"/>
+        </svg>
+        <span class="brand-copy">
+          <span class="brand-name">Junction</span>
+          <span class="brand-sub">desktop → tv</span>
+        </span>
+      </a>
+
+      <div class="topbar-tools">
+        <span id="demoBadge" class="demo-badge" hidden>DEMO DATA</span>
+        <div id="globalStatus" class="status-pill is-idle" role="status" aria-live="polite">
+          <span class="status-dot" aria-hidden="true"></span>
+          <span id="globalStatusText">Checking link</span>
+        </div>
+        <span id="clock" class="clock" aria-label="TV time">--:--</span>
+      </div>
+    </header>
+
+    <div class="app-body">
+      <aside class="rail">
+        <nav class="nav" aria-label="Sections">
+          <button type="button" class="nav-item" data-go="home" aria-current="page">
+            <svg class="icon" aria-hidden="true"><use href="#i-home"/></svg>
+            <span class="nav-label">Home</span><kbd>1</kbd>
+          </button>
+          <button type="button" class="nav-item" data-go="link">
+            <svg class="icon" aria-hidden="true"><use href="#i-link"/></svg>
+            <span class="nav-label">Link</span><kbd>2</kbd>
+          </button>
+          <button type="button" class="nav-item" data-go="apps">
+            <svg class="icon" aria-hidden="true"><use href="#i-apps"/></svg>
+            <span class="nav-label">Apps</span><kbd>3</kbd>
+          </button>
+          <button type="button" class="nav-item" data-go="settings">
+            <svg class="icon" aria-hidden="true"><use href="#i-settings"/></svg>
+            <span class="nav-label">Settings</span><kbd>4</kbd>
+          </button>
+        </nav>
+
+        <div class="rail-foot">
+          <div class="rail-fact">
+            <span class="rail-label">TV address</span>
+            <strong id="tvAddress">Unavailable</strong>
+          </div>
+          <div class="rail-fact">
+            <span class="rail-label">Root helper</span>
+            <strong id="rootState" class="is-muted">Not checked</strong>
+          </div>
+          <div class="rail-meta">
+            <span>Junction <span id="versionLabel">0.2.4</span></span>
+            <span>Synergy 1.x</span>
+          </div>
+        </div>
+      </aside>
+
+      <main id="main" class="main">
+
+        <!-- HOME -->
+        <section class="view view-home" data-panel="home" aria-labelledby="home-title">
+          <div class="hero">
+            <div class="hero-copy">
+              <p class="eyebrow"><span class="eyebrow-line"></span>Live workspace</p>
+              <h1 id="home-title" tabindex="-1">Your desk,<br /><span>on the TV.</span></h1>
+              <p class="lede">One keyboard. Two screens. Junction carries input from your desktop to the TV and keeps every open app one click away.</p>
+              <div class="hero-actions">
+                <button type="button" class="btn btn-primary" data-action="home-start">
+                  <svg class="icon" aria-hidden="true"><use href="#i-play"/></svg>
+                  <span id="homeStartLabel">Start link</span>
+                </button>
+                <button type="button" class="btn btn-quiet" data-go="apps">
+                  <svg class="icon" aria-hidden="true"><use href="#i-apps"/></svg>
+                  Open apps
+                </button>
+              </div>
+            </div>
+
+            <div class="link-board" aria-label="Link overview">
+              <div class="board-head">
+                <span class="eyebrow">Handoff</span>
+                <span id="boardMode" class="board-mode">Idle</span>
+              </div>
+              <div class="board-path">
+                <div class="endpoint">
+                  <span class="endpoint-icon desktop" aria-hidden="true">
+                    <svg class="icon"><use href="#i-keyboard"/></svg>
+                  </span>
+                  <strong>Desktop</strong>
+                  <small id="boardHost">Not set</small>
+                </div>
+                <div class="path-line" aria-hidden="true">
+                  <span class="path-track"></span>
+                  <span class="path-corner"><i></i></span>
+                  <span class="path-label">2 × 2</span>
+                </div>
+                <div class="endpoint">
+                  <span class="endpoint-icon tv" aria-hidden="true">
+                    <svg class="icon"><use href="#i-dock"/></svg>
+                  </span>
+                  <strong>TV</strong>
+                  <small id="boardScreen">webos-tv</small>
+                </div>
+              </div>
+              <div class="board-foot">
+                <div>
+                  <span class="meta-label">Link</span>
+                  <strong id="boardLink">Not connected</strong>
+                </div>
+                <div>
+                  <span class="meta-label">Input</span>
+                  <strong id="boardInput">Unknown</strong>
+                </div>
+                <button type="button" class="text-btn" data-go="link">Details <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></button>
+              </div>
+            </div>
+          </div>
+
+          <div class="quick-grid">
+            <button type="button" class="quick-card" data-go="link">
+              <span class="quick-top"><span class="quick-index">01</span><span id="quickInputState" class="chip">Not checked</span></span>
+              <strong>Input engine</strong>
+              <span class="quick-copy">Root + uinput readiness, probe and client log.</span>
+              <span class="quick-link">Inspect <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></span>
+            </button>
+            <button type="button" class="quick-card" data-go="settings">
+              <span class="quick-top"><span class="quick-index">02</span><span id="quickHomeState" class="chip is-good">System home</span></span>
+              <strong>Windows key</strong>
+              <span class="quick-copy">Return to the TV's system home, never another app.</span>
+              <span class="quick-link">Configure <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></span>
+            </button>
+            <button type="button" class="quick-card" data-go="link">
+              <span class="quick-top"><span class="quick-index">03</span><span id="quickAutoState" class="chip">Off</span></span>
+              <strong>Start with TV</strong>
+              <span class="quick-copy">Bring the link up after the TV boots, without opening this app.</span>
+              <span class="quick-link">Manage <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></span>
+            </button>
+          </div>
+
+          <div class="section-line">
+            <h2>Within reach</h2>
+            <div class="section-actions">
+              <span id="appsHint" class="muted-copy">Loading app catalog…</span>
+              <button type="button" class="text-btn" data-go="apps">All apps <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></button>
+            </div>
+          </div>
+          <div id="homeApps" class="app-strip" aria-live="polite">
+            <p class="empty-note">Open Apps to browse this TV's catalog.</p>
+          </div>
+        </section>
+
+        <!-- LINK -->
+        <section class="view" data-panel="link" aria-labelledby="link-title" hidden>
+          <header class="view-head">
+            <div>
+              <p class="eyebrow">Link</p>
+              <h1 id="link-title" tabindex="-1">Desktop connection</h1>
+              <p class="lede">Point Junction at the Synergy server on your desktop. The TV keeps its own screen name so the desktop layout stays stable.</p>
+            </div>
+            <div class="view-status">
+              <span id="linkStatusDot" class="status-dot" aria-hidden="true"></span>
+              <span id="linkStatusText">Not checked</span>
+            </div>
+          </header>
+
+          <div class="link-grid">
+            <form id="connectionForm" class="panel form-panel" autocomplete="off">
+              <div class="panel-head">
+                <div>
+                  <p class="eyebrow">Connection</p>
+                  <h2>Server details</h2>
+                </div>
+                <span class="panel-tag">Synergy 1.x</span>
+              </div>
+
+              <div class="field-row">
+                <label class="field field-wide" for="host">
+                  <span>Desktop host or IP</span>
+                  <input id="host" name="host" type="text" inputmode="url" spellcheck="false" placeholder="192.168.1.20" />
+                </label>
+                <label class="field field-narrow" for="port">
+                  <span>Port</span>
+                  <input id="port" name="port" type="text" inputmode="numeric" value="24800" />
+                </label>
+              </div>
+
+              <div class="field-row">
+                <label class="field" for="screenName">
+                  <span>TV screen name</span>
+                  <input id="screenName" name="screenName" type="text" spellcheck="false" value="webos-tv" />
+                </label>
+                <div class="field-pair">
+                  <label class="field" for="width">
+                    <span>Width</span>
+                    <input id="width" name="width" type="text" inputmode="numeric" value="1920" />
+                  </label>
+                  <label class="field" for="height">
+                    <span>Height</span>
+                    <input id="height" name="height" type="text" inputmode="numeric" value="1080" />
+                  </label>
+                </div>
+              </div>
+
+              <div class="switch-list">
+                <label class="switch-row" for="dryRun">
+                  <span class="switch-copy">
+                    <strong>Dry run</strong>
+                    <small>Connect and log input without creating virtual devices.</small>
+                  </span>
+                  <input id="dryRun" name="dryRun" type="checkbox" class="switch-input" />
+                  <span class="switch-ui" aria-hidden="true"></span>
+                </label>
+                <label class="switch-row" for="autoConnect">
+                  <span class="switch-copy">
+                    <strong>Connect when Junction opens</strong>
+                    <small>Uses the saved details. Existing links are never restarted silently.</small>
+                  </span>
+                  <input id="autoConnect" name="autoConnect" type="checkbox" class="switch-input" />
+                  <span class="switch-ui" aria-hidden="true"></span>
+                </label>
+              </div>
+
+              <p id="formMessage" class="form-message" role="status" aria-live="polite"></p>
+
+              <div class="form-actions">
+                <button type="submit" class="btn btn-primary" id="startBtn">
+                  <svg class="icon" aria-hidden="true"><use href="#i-play"/></svg>
+                  Save &amp; start
+                </button>
+                <button type="button" class="btn btn-quiet" data-action="stop">
+                  <svg class="icon" aria-hidden="true"><use href="#i-stop"/></svg>
+                  Stop
+                </button>
+                <button type="button" class="btn btn-ghost" data-action="probe">
+                  <svg class="icon" aria-hidden="true"><use href="#i-probe"/></svg>
+                  Probe TV
+                </button>
+              </div>
+              <p class="form-foot">Classic unencrypted Synergy TCP. Keep the server on a trusted LAN and never expose port 24800 to the internet.</p>
+            </form>
+
+            <section class="panel log-panel" aria-labelledby="log-title">
+              <div class="panel-head">
+                <div>
+                  <p class="eyebrow">Live client</p>
+                  <h2 id="log-title">Link log</h2>
+                </div>
+                <div class="panel-actions">
+                  <button type="button" class="btn btn-ghost btn-small" data-action="refresh">
+                    <svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg>
+                    Refresh
+                  </button>
+                  <button type="button" class="btn btn-ghost btn-small" data-action="clear-log">Clear</button>
+                </div>
+              </div>
+              <div class="log-meta">
+                <span id="logMeta">Waiting for the root helper…</span>
+                <span id="logFollow" class="follow-state">Following</span>
+              </div>
+              <pre id="logView" class="log-view" tabindex="0" aria-live="polite">Junction has not read the client log yet.</pre>
+            </section>
+          </div>
+
+          <div class="detail-grid">
+            <section class="panel" aria-labelledby="probe-title">
+              <div class="panel-head">
+                <div>
+                  <p class="eyebrow">Diagnostics</p>
+                  <h2 id="probe-title">TV capability</h2>
+                </div>
+                <button type="button" class="text-btn" data-action="probe">Run probe</button>
+              </div>
+              <dl class="facts">
+                <div><dt>Root helper</dt><dd id="factRoot">Unknown</dd></div>
+                <div><dt>Python</dt><dd id="factPython">Unknown</dd></div>
+                <div><dt>uinput</dt><dd id="factUinput">Unknown</dd></div>
+                <div><dt>TV address</dt><dd id="factAddress">Unavailable</dd></div>
+              </dl>
+              <p id="probeNote" class="panel-note">Probing is read-only: it opens and closes uinput without creating a device or sending input.</p>
+            </section>
+
+            <section class="panel" aria-labelledby="autostart-title">
+              <div class="panel-head">
+                <div>
+                  <p class="eyebrow">Always ready</p>
+                  <h2 id="autostart-title">Start with TV</h2>
+                </div>
+                <span id="autostartBadge" class="chip">Unknown</span>
+              </div>
+              <p class="panel-copy">Runs the saved client through the Homebrew startup hook. Changes apply at the next TV boot; the current link is left alone.</p>
+              <div class="form-actions">
+                <button type="button" class="btn btn-quiet" data-action="autostart-on">Enable autostart</button>
+                <button type="button" class="btn btn-ghost" data-action="autostart-off">Disable</button>
+              </div>
+              <p id="autostartNote" class="panel-note">Autostart is not enabled.</p>
+            </section>
+
+            <section class="panel" aria-labelledby="security-title">
+              <div class="panel-head">
+                <div>
+                  <p class="eyebrow">Trust</p>
+                  <h2 id="security-title">Local only</h2>
+                </div>
+              </div>
+              <p class="panel-copy">The client runs through the TV's root helper and injects input system-wide. It does not phone home, use a cloud service or need a Node.js runtime.</p>
+              <p class="panel-note">Clipboard sync and TLS are deliberately out of scope for this build.</p>
+            </section>
+          </div>
+        </section>
+
+        <!-- APPS -->
+        <section class="view" data-panel="apps" aria-labelledby="apps-title" hidden>
+          <header class="view-head">
+            <div>
+              <p class="eyebrow">Apps</p>
+              <h1 id="apps-title" tabindex="-1">Open apps</h1>
+              <p class="lede">Every app on the TV, without leaving the keyboard. Running and foreground apps are marked when the system reports them.</p>
+            </div>
+            <div class="app-tools">
+              <div class="search-box">
+                <svg class="icon" aria-hidden="true"><use href="#i-search"/></svg>
+                <input id="appSearch" type="search" placeholder="Filter apps" aria-label="Filter apps" spellcheck="false" />
+                <kbd>/</kbd>
+              </div>
+              <button type="button" class="btn btn-quiet" data-action="refresh-apps">
+                <svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg>
+                Refresh
+              </button>
+            </div>
+          </header>
+
+          <div class="apps-toolbar">
+            <p id="appsStatus" class="muted-copy" role="status" aria-live="polite">Loading app catalog…</p>
+            <span class="legend"><i class="legend-dot running"></i> Running <i class="legend-dot foreground"></i> Foreground</span>
+          </div>
+
+          <div id="appGrid" class="app-grid" aria-live="polite">
+            <p class="empty-note">No apps loaded yet.</p>
+          </div>
+
+          <section id="dockSlot" class="dock-card" data-dock-slot="junction" aria-labelledby="dock-title">
+            <div class="dock-copy">
+              <p class="eyebrow">Companion</p>
+              <h2 id="dock-title">Dock</h2>
+              <p>A separate, autohiding app switcher for the TV. Junction can launch it when installed; the built-in app grid always stays available.</p>
+              <p class="panel-note">A third-party app cannot guarantee an always-on overlay above other TV apps. The companion is a standalone surface.</p>
+            </div>
+            <div class="dock-actions">
+              <span class="dock-id">dev.hurrspice.tvdock</span>
+              <button type="button" class="btn btn-quiet" data-action="open-dock">
+                <svg class="icon" aria-hidden="true"><use href="#i-dock"/></svg>
+                Launch dock
+              </button>
+              <p id="dockMessage" class="panel-note" role="status" aria-live="polite"></p>
+            </div>
+          </section>
+        </section>
+
+        <!-- SETTINGS -->
+        <section class="view" data-panel="settings" aria-labelledby="settings-title" hidden>
+          <header class="view-head">
+            <div>
+              <p class="eyebrow">Settings</p>
+              <h1 id="settings-title" tabindex="-1">Make it yours</h1>
+              <p class="lede">Home-key behaviour, the desktop handoff corner and TV app switching. Action changes are explicit; live links are never restarted silently.</p>
+            </div>
+            <span class="save-state" id="saveState" role="status" aria-live="polite">Saved locally</span>
+          </header>
+
+          <div class="settings-grid">
+            <section class="panel settings-panel" aria-labelledby="home-key-title">
+              <div class="panel-head">
+                <div>
+                  <p class="eyebrow">Home key</p>
+                  <h2 id="home-key-title">Windows key target</h2>
+                </div>
+                <span class="panel-tag">Client side</span>
+              </div>
+              <p class="panel-copy">When the pointer is on the TV, the Windows key can return to the TV's own system home. It is consumed, so no stray Meta key reaches the TV.</p>
+
+              <div class="radio-grid" role="radiogroup" aria-label="Windows key target">
+                <label class="radio-card">
+                  <input type="radio" name="homeTarget" value="system" />
+                  <span class="radio-ui" aria-hidden="true"></span>
+                  <span><strong>System home</strong><small>Send the TV HOME action.</small></span>
+                </label>
+                <label class="radio-card">
+                  <input type="radio" name="homeTarget" value="off" />
+                  <span class="radio-ui" aria-hidden="true"></span>
+                  <span><strong>Off</strong><small>Consume the key, do nothing.</small></span>
+                </label>
+              </div>
+
+              <div class="slider-row">
+                <label for="homeDelay">Hold to activate</label>
+                <div class="slider-control">
+                  <input id="homeDelay" type="range" min="0" max="5000" step="50" value="0" />
+                  <output id="homeDelayOut" for="homeDelay">0 ms</output>
+                </div>
+                <p class="field-help">0 ms sends HOME on the first press. A longer hold cancels if the key is released early. This is separate from the desktop handoff delay.</p>
+              </div>
+
+              <div class="form-actions">
+                <button type="button" class="btn btn-primary" data-action="save-home">Save home key</button>
+                <button type="button" class="btn btn-ghost" data-action="restart-link">Restart link to apply</button>
+              </div>
+              <p id="homeNote" class="panel-note">Saved values apply the next time the client starts.</p>
+
+              <div class="keyflow" aria-hidden="true">
+                <span class="keycap">win</span>
+                <svg class="keyflow-arrow icon"><use href="#i-arrow"/></svg>
+                <span class="keyflow-target">
+                  <svg class="icon"><use href="#i-home"/></svg>
+                  <span><strong id="keyflowTarget">System home</strong><small id="keyflowSub">TV home screen</small></span>
+                </span>
+              </div>
+              <ul class="help-list">
+                <li>Both Windows keys are consumed; no Meta event reaches the TV.</li>
+                <li>A hold delay cancels when the key is released early.</li>
+                <li>This setting never opens another app as a home target.</li>
+              </ul>
+            </section>
+
+            <section class="panel settings-panel" aria-labelledby="handoff-title">
+              <div class="panel-head">
+                <div>
+                  <p class="eyebrow">Desktop handoff</p>
+                  <h2 id="handoff-title">The 2 × 2 corner</h2>
+                </div>
+                <span class="panel-tag is-warn">Experimental</span>
+              </div>
+              <p class="panel-copy">A profile for the Synergy server: a two-pixel corner at the desktop's top-left, a switch delay, and a suspend override. Junction stores the profile; it does not silently change the live server.</p>
+
+              <div class="switch-list compact">
+                <label class="switch-row" for="cornerEnabled">
+                  <span class="switch-copy">
+                    <strong>Enable corner profile</strong>
+                    <small>2 px wide × 2 px tall at top-left.</small>
+                  </span>
+                  <input id="cornerEnabled" type="checkbox" class="switch-input" />
+                  <span class="switch-ui" aria-hidden="true"></span>
+                </label>
+                <label class="switch-row" for="cornerOverride">
+                  <span class="switch-copy">
+                    <strong>Suspend handoff</strong>
+                    <small>Requests an override while the profile is applied.</small>
+                  </span>
+                  <input id="cornerOverride" type="checkbox" class="switch-input" />
+                  <span class="switch-ui" aria-hidden="true"></span>
+                </label>
+              </div>
+
+              <div class="slider-row">
+                <label for="switchDelay">Synergy switch delay</label>
+                <div class="slider-control">
+                  <input id="switchDelay" type="range" min="0" max="1000" step="10" value="250" />
+                  <output id="switchDelayOut" for="switchDelay">250 ms</output>
+                </div>
+                <p class="field-help">Time resting against the edge before crossing. The custom config's value is separate from the desktop GUI setting.</p>
+              </div>
+
+              <div class="profile-actions">
+                <button type="button" class="btn btn-quiet" data-action="save-profile">Save profile to TV</button>
+                <button type="button" class="btn btn-ghost" data-action="copy-profile">
+                  <svg class="icon" aria-hidden="true"><use href="#i-copy"/></svg>
+                  Copy JSON
+                </button>
+                <button type="button" class="btn btn-ghost" data-action="read-server">Read desktop</button>
+              </div>
+              <dl class="server-facts" id="serverFacts">
+                <div><dt>Server</dt><dd id="serverState">Not checked</dd></div>
+                <div><dt>Delay</dt><dd id="serverDelay">—</dd></div>
+                <div><dt>Override</dt><dd id="serverOverride">—</dd></div>
+              </dl>
+              <pre id="profilePreview" class="profile-preview" tabindex="0">Profile preview</pre>
+              <p class="panel-note">Read desktop queries the server's read-only settings API. Applying a profile is a lead/desktop-helper step with physical acceptance; the parser alone cannot prove a true 2×2 region.</p>
+            </section>
+
+            <section class="panel settings-panel" aria-labelledby="dock-settings-title">
+              <div class="panel-head">
+                <div>
+                  <p class="eyebrow">App switching</p>
+                  <h2 id="dock-settings-title">Dock &amp; shortcuts</h2>
+                </div>
+              </div>
+              <dl class="facts compact-facts">
+                <div><dt>Dock app</dt><dd>dev.hurrspice.tvdock</dd></div>
+                <div><dt>Built-in switcher</dt><dd>Always available</dd></div>
+                <div><dt>Overlay</dt><dd>Not supported as a third-party surface</dd></div>
+              </dl>
+              <div class="shortcut-grid" aria-label="Keyboard shortcuts">
+                <span><kbd>1</kbd>…<kbd>4</kbd> sections</span>
+                <span><kbd>/</kbd> filter apps</span>
+                <span><kbd>Tab</kbd> move focus</span>
+                <span><kbd>Enter</kbd> activate</span>
+                <span><kbd>Esc</kbd> clear filter</span>
+                <span><kbd>←↑↓→</kbd> app grid</span>
+              </div>
+              <div class="form-actions">
+                <button type="button" class="btn btn-quiet" data-action="open-dock">Launch dock</button>
+                <button type="button" class="btn btn-ghost" data-go="apps">Open app grid</button>
+              </div>
+            </section>
+
+            <section class="panel settings-panel" aria-labelledby="maintenance-title">
+              <div class="panel-head">
+                <div>
+                  <p class="eyebrow">Maintenance</p>
+                  <h2 id="maintenance-title">This TV</h2>
+                </div>
+              </div>
+              <dl class="facts compact-facts">
+                <div><dt>Version</dt><dd id="aboutVersion">0.2.4</dd></div>
+                <div><dt>App ID</dt><dd class="mono">dev.hurrspice.synergywebos</dd></div>
+                <div><dt>Runtime</dt><dd>Static web app · no Node.js</dd></div>
+                <div><dt>Display</dt><dd>1920 × 1080 safe layout</dd></div>
+              </dl>
+              <div class="form-actions">
+                <button type="button" class="btn btn-ghost" data-action="reset-settings" id="resetBtn">Reset local settings</button>
+              </div>
+              <p id="resetNote" class="panel-note">Resetting removes this app's saved form values from the TV. It does not stop the link or disable autostart.</p>
+            </section>
+          </div>
+        </section>
+
+        <footer class="main-foot">
+          <span>Junction <span class="version-inline">0.2.4</span> · independent Synergy-compatible client</span>
+          <span>Trusted LAN only · no cloud · no Node.js runtime</span>
+        </footer>
+      </main>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+  <script src="js/core.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

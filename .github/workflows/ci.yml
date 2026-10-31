@@ -11,9 +11,8 @@
 # Live TV/PC checks are NOT part of CI. They require a rooted TV and the live
 # Synergy server and are recorded as maintainer acceptance (docs/testing.md).
 #
-# While other workstream folders have not landed yet, the docs-link check warns
-# about links into them via -AllowMissing. Once the lead has committed those
-# folders, remove that switch to make every link mandatory.
+# All workstream folders are committed, so documentation links are mandatory;
+# CI runs the same build and full test runner used by the maintainer.
 
 name: CI
 
@@ -44,7 +43,7 @@ jobs:
 
       - name: Check documentation links
         shell: pwsh
-        run: ./scripts/check-docs-links.ps1 -AllowMissing 'app,dock,tools,scripts,tests'
+        run: ./scripts/check-docs-links.ps1
 
   detect-build:
     name: Detect build pipeline
@@ -99,11 +98,4 @@ jobs:
 
       - name: Test
         shell: pwsh
-        run: |
-          if (Test-Path './scripts/build/test.ps1') {
-            ./scripts/build/test.ps1
-          } elseif ((Test-Path './package.json') -and ((Get-Content ./package.json -Raw) -match '"test"\s*:')) {
-            npm test
-          } else {
-            Write-Host "No test entry point yet; skipping."
-          }
+        run: ./tests/lib/Run-Tests.ps1

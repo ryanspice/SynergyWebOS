@@ -22,21 +22,24 @@ apply.
 | Check | Command | Covers |
 | --- | --- | --- |
 | Repo hygiene | `pwsh ./scripts/check-repo-guards.ps1 -Staged` (CI: no flag = tracked files) | No secrets, keys, backups, proprietary bundles, dependency/build junk staged or tracked. |
-| Docs links | `pwsh ./scripts/check-docs-links.ps1` | Relative Markdown links resolve. While `app/`, `dock/`, `tools/`, `scripts/` and `tests/` are still uncommitted, CI passes `-AllowMissing 'app,dock,tools,scripts,tests'`, which only warns for those prefixes; remove it after integration. |
+| Docs links | `pwsh ./scripts/check-docs-links.ps1` | Relative Markdown links resolve; all workstream folders are committed, so links are mandatory. |
 | Workflow syntax | `npx --yes yaml-lint .github/workflows/ci.yml .github/dependabot.yml` (optional) | YAML parses and is well formed. |
 
 The optional pre-commit hook (`.githooks/pre-commit`) runs the repo hygiene
 check automatically when `git config core.hooksPath .githooks` is set.
 
-## Build-level checks **[pending: scripts/build/]**
+## Build-level checks
 
-- Package validation (`ares-package`), plus a static contract check that the
-  app/client contains no reference to a third-party launcher.
-- Home-target contract: the client's home action maps to the TV system HOME and
-  suppresses repeat/release events.
+- Package validation (`ares-package`), plus static contract checks for the
+  client path, root ACG declaration and the absence of a third-party launcher.
+- Home-target contract: the client's Windows/Super/Meta keys map to system Home
+  and repeats/releases are consumed.
+- Alt-hold contract: five-second continuous Alt launches Home, releases the
+  injected modifier, and cancels on release/pointer exit/disconnect/stop.
 - Config tooling: dry-run/validation against a temporary Synergy core on a
   free port; no live server changes.
-- Dock: static checks plus a local browser check at 1920 × 1080.
+- Dock: catalog injection contract, open-app sorting and a local browser check
+  at 1920 × 1080.
 
 ## Manual TV/PC acceptance (maintainer)
 
@@ -45,12 +48,16 @@ These cannot run in CI. Minimum acceptance for a release:
 1. PC → TV handoff triggers only from the configured small corner, after the
    configured delay, and does not slow the pointer at other corners.
 2. TV → PC return works with a physical mouse.
-3. Windows key shows the TV's system home; a third-party launcher is not
-   launched; no stray Meta input.
-4. Dock shows open apps, switches focus and autohides.
-5. The TV app reports status/log/probe accurately at 1080p with keyboard and
+3. Windows key shows the TV's system home; holding either Alt key for five
+   seconds does the same; a third-party launcher is not launched; no stray
+   modifier input.
+4. The app reports **Root helper · Ready** and a successful snapshot; root and
+   writable uinput are real, not inferred from the preview.
+5. The dock shows open apps first, marks foreground/running entries, switches
+   focus and autohides.
+6. The TV app reports status/log/probe accurately at 1080p with keyboard and
    mouse.
-6. The Synergy core/service and the live client were not restarted during
+7. The Synergy core/service and the live client were not restarted during
    verification unless the release notes say so.
 
 Record the result (date, versions, TV model, webOS version, commit) in the

@@ -1,0 +1,13 @@
+{
+  "id": "dev.hurrspice.tvdock",
+  "version": "0.2.3",
+  "vendor": "Hurr Spice",
+  "type": "web",
+  "main": "index.html",
+  "title": "TV Dock",
+  "icon": "icon.png",
+  "resolution": "1920x1080",
+  "disableBackHistoryAPI": true,
+  "noSplashOnLaunch": true,
+  "requiredACG": ["lunabus.query", "application.launcher", "application.query"]
+}

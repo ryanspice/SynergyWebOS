@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "junction.handoff.v1",
+  "title": "Junction desktop handoff profile",
+  "description": "Portable description of the 2x2 top-left handoff and its delay/override. The TV app exports this file; a desktop helper or the lead applies it to Synergy after review. This file does not change a live server by itself.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "generated_by",
+    "screen",
+    "corner",
+    "switch_delay_ms",
+    "override",
+    "notes"
+  ],
+  "properties": {
+    "schema": {
+      "const": "junction.handoff.v1"
+    },
+    "generated_by": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80
+    },
+    "screen": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9._-]+$",
+      "description": "Synergy screen name of the TV client, e.g. webos-tv."
+    },
+    "corner": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["edge", "width_px", "height_px", "enabled"],
+      "properties": {
+        "edge": {
+          "const": "top-left"
+        },
+        "width_px": {
+          "const": 2
+        },
+        "height_px": {
+          "const": 2
+        },
+        "enabled": {
+          "type": "boolean"
+        }
+      }
+    },
+    "switch_delay_ms": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1000
+    },
+    "override": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["suspend"],
+      "properties": {
+        "suspend": {
+          "type": "boolean",
+          "description": "Request that the desktop helper suspend the handoff links while applying this profile."
+        }
+      }
+    },
+    "notes": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500
+    }
+  }
+}
