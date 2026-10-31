@@ -1,9 +1,18 @@
 # GitHub setup — remaining steps
 
-Local repository status at handoff: initialised on `main` with three commits
-(`93aa241` initial scaffold, `61bd8bf` guard hardening, `93deb2a` doc follow-up —
-see `git log`), **no remote, no push, no GitHub repository**. Publication is the lead's explicit decision (per the
-brief). Nothing below was executed by the repo workstream.
+Local repository status at handoff: initialised on `main`; history starts at
+`93aa241` (initial scaffold) and continues with guard fixes and doc follow-ups
+(`git log --oneline` is authoritative). **No remote, no push, no GitHub
+repository.** Publication is the lead's explicit decision (per the brief).
+Nothing below was executed by the repo workstream.
+
+Before the first push, squash the scaffold follow-up commits so the public
+history reads cleanly (nothing is published yet, so this is safe):
+
+```powershell
+git reset --soft 93aa241
+git commit -m "Initial commit: repository scaffold, docs, CI and hygiene rules"
+```
 
 ## 0. Prerequisites / decisions before publishing
 
@@ -22,9 +31,10 @@ brief). Nothing below was executed by the repo workstream.
 
 ## 1. Sanitise / flatten history (recommended before first push)
 
-The initial commit contains only repository-owned root files (see below) and
-no secret scan findings. While nothing is published, the lead may freely amend
-or squash integration commits before the first push. Do not rewrite a
+The commit that starts this history contains only repository-owned root files
+(see below). A scan of every commit found no secrets, tokens, private keys,
+device addresses or personal paths. While nothing is published, the lead may
+freely amend or squash commits before the first push. Do not rewrite a
 published history.
 
 ## 2. Create the repository (requires lead authorisation)
