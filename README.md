@@ -1,16 +1,14 @@
-# Junction — synergy-tv (working title)
+# Junction — synergy-tv
 
-**Junction** (*"Your desk, on the TV."*) is the proposed product name for a clean
-rebuild of a TV-first Synergy experience for LG webOS televisions: a TV app plus
-a companion dock/app switcher that brings your desktop keyboard and mouse to the
-TV through a small, configurable handoff corner.
+**Junction** (*"Your desk, on the TV."*) is a TV-first Synergy experience for LG
+webOS televisions: a TV app plus a companion dock/app switcher that brings your
+desktop keyboard and mouse to the TV through a small, configurable handoff
+corner.
 
-- Brand, visual identity, app ID proposal and migration notes:
-  [`app/BRAND.md`](app/BRAND.md) (owned by the app workstream and still
-  **proposed**; the lead finalises the name).
-- Repository name `synergy-tv` is a placeholder until the lead renames it, and
-  the package ID remains the existing one for upgrade compatibility — see
-  `app/BRAND.md`.
+- Brand, visual identity, app ID and migration notes:
+  [`app/BRAND.md`](app/BRAND.md).
+- The repository name `synergy-tv` is retained; the package ID remains the
+  existing one for upgrade compatibility.
 
 > Status: **working local build.** Junction `0.2.4` and TV Dock `0.2.3` are
 > packaged, installed and exercised on the target TV; the desktop Synergy config

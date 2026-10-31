@@ -141,12 +141,20 @@ The app UI stores `homeTarget` (`system`/`off`) and `homeDelayMs` (0–5000) and
 passes them as `--home-target` and `--home-delay-ms` on the next client start.
 `app/client/client.py` already contains the behaviour:
 
-- both Meta codes 125/126 consumed on down/repeat/up;
-- no Meta injected, including in `off` mode;
+- Windows/Super/Meta IDs `0xEFE7/0xEFE8/0xEFEB/0xEFEC` consumed on
+  down/repeat/up; no modifier injected, including in `off` mode;
 - system target launches the webOS system Home app
   (`com.webos.app.home`) with `luna-send`;
 - hold delay cancels on release/COUT/disconnect/stop;
+- holding either Alt key for five seconds launches system Home and releases the
+  injected Alt, without breaking shorter Alt shortcuts;
 - dry-run logs instead of launching.
+
+The root helper must resolve the packaged `client/tvctl.sh`, not a package-root
+`tvctl.sh`. Keep `requiredACG` containing `lunabus.query`; the acceptance suite
+checks both. The TV denies application-manager queries to unprivileged apps, so
+Junction reads the app catalog/running list through the root helper and feeds the
+dock's `catalog.js`. The dock remains unprivileged.
 
 This folds in the intent of `scripts/home/client-home.patch`; reconcile names
 and comments if that patch is treated as the canonical source. The old patch
