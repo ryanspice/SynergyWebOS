@@ -83,7 +83,7 @@ Newest first. Each entry: id, date, decision, owner, review condition.
 
 - **Date:** 2026-10-31
 - **Context:** the previously installed prototype used the app ID
-  `dev.hurrspice.synergywebos`; changing it means the TV treats the new app as
+  `dev.canopy.synergywebos`; changing it means the TV treats the new app as
   a fresh install.
 - **Decision:** app ID ownership belongs to `app/BRAND.md`. The repository
   workstream records only that the app ID must match `appinfo.json`, icons and

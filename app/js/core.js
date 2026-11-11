@@ -4,10 +4,10 @@
   'use strict';
 
   var APP = {
-    id: 'dev.hurrspice.synergywebos',
-    version: '0.3.2',
+    id: 'dev.canopy.synergywebos',
+    version: '0.3.4',
     name: 'SynergyWebOS',
-    dockAppId: 'dev.hurrspice.tvdock',
+    dockAppId: 'dev.canopy.tvdock',
     serverApiPort: 24803
   };
 

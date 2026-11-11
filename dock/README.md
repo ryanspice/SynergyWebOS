@@ -18,7 +18,7 @@ The app tries `listLaunchPoints`, then `listApps` as catalog fallback; queries `
 ## Integration decision
 
 **Implemented first integration:** the directory is packaged as a standalone
-card app (`dev.hurrspice.tvdock`) and SynergyWebOS's **Launch dock** button refreshes
+card app (`dev.canopy.tvdock`) and SynergyWebOS's **Launch dock** button refreshes
 `catalog.js` through the root helper before launching it. This keeps the TV's
 application-manager ACL out of the dock: the privileged catalog read stays in
 SynergyWebOS, while the dock only calls the permitted `launch` method. The standalone

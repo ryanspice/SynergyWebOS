@@ -13,7 +13,7 @@ classic JavaScript; the Python client has no third-party packages.
 ```
 app/
   index.html              app shell
-  appinfo.json            webOS manifest (id: dev.hurrspice.synergywebos)
+  appinfo.json            webOS manifest (id: dev.canopy.synergywebos)
   css/app.css             1080p visual system
   js/core.js              TV service bridge, settings, profile, app catalog
   js/app.js               views, polling, keyboard/mouse interaction
@@ -104,7 +104,7 @@ server or a Node runtime on the TV.
   The Settings screen shows the active link values separately.
 - The 2 × 2 handoff card is an **exported profile**, not a live server write.
   "Read desktop" is a read-only GET of the Synergy settings API.
-- The dock is a separate app (`dev.hurrspice.tvdock`). The built-in app grid
+- The dock is a separate app (`dev.canopy.tvdock`). The built-in app grid
   remains the guaranteed surface; the companion launch is best-effort.
 - All service calls are one-shot and time out. There is no background watcher
   beyond the 4-second status poll while the app is visible.

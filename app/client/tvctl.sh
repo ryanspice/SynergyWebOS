@@ -3,8 +3,8 @@
 # Runs the local Python client, its startup hook and the read-only profile bridge.
 set -u
 
-APP_ID="dev.hurrspice.synergywebos"
-APP_VERSION="0.3.2"
+APP_ID="dev.canopy.synergywebos"
+APP_VERSION="0.3.4"
 BASE_DIR="$(dirname "$0")"
 BASE="$(CDPATH= cd "$BASE_DIR" 2>/dev/null && pwd)"
 

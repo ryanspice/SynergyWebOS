@@ -46,7 +46,7 @@ folder from the repository workstream.
 ## Integration gaps for the lead (read-only observations, 2026-10-31)
 
 - **Brand is final:** *SynergyWebOS by Ryan Spice-Finnie*, repository
-  `synergy-tv`, package ID `dev.hurrspice.synergywebos` unchanged for upgrade.
+  `synergy-tv`, package ID `dev.canopy.synergywebos` unchanged for upgrade.
 - **Build output location differs from `building.md`:** `scripts/build/` uses
   `dist/` (ignored), and release packages should go to `dist/release/` as
   documented. Update `building.md` if the build entry point is renamed.

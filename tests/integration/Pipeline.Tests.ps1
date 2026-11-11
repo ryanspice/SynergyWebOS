@@ -112,7 +112,7 @@ $map['pipeline: release IPK payload matches the app contract (id, version, clien
     Assert-Equal 1 $appRoots.Count 'exactly one packaged app'
     $rel = @(foreach ($k in $files.AppFiles.Keys) { $k -replace ('^' + [regex]::Escape($appRoots[0]) + '/'), '' })
     $ai = [System.Text.Encoding]::UTF8.GetString($files.AppFiles[$appRoots[0] + '/appinfo.json']) | ConvertFrom-Json
-    Assert-Equal 'dev.hurrspice.synergywebos' $ai.id
+    Assert-Equal 'dev.canopy.synergywebos' $ai.id
     Assert-Equal 'web' $ai.type
     foreach ($required in 'index.html', 'js/core.js', 'js/app.js', 'css/app.css', 'client/client.py', 'client/tvctl.sh', 'client/probe.py', 'icon.png', 'icon-large.png') {
         Assert-True ($rel -contains $required) "IPK missing $required"

@@ -11,7 +11,7 @@ import platform
 import sys
 
 APP_NAME = "SynergyWebOS"
-APP_VERSION = "0.3.2"
+APP_VERSION = "0.3.4"
 HOME_APP = "com.webos.app.home"
 LUNA_SEND = "/usr/bin/luna-send"
 

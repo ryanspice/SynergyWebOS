@@ -1,7 +1,7 @@
 # SynergyWebOS — brand and migration
 
 **Status:** adopted for the `0.3.2` build by **Ryan Spice-Finnie**. The package
-ID stays `dev.hurrspice.synergywebos` for in-place upgrade; the display name and
+ID stays `dev.canopy.synergywebos` for in-place upgrade; the display name and
 vendor change.
 
 ## 1. Name
@@ -105,7 +105,7 @@ time the client starts." A failed action says what failed and what still works.
 
 ## 3. App identity
 
-**Recommendation: keep the existing package ID `dev.hurrspice.synergywebos`.**
+**Recommendation: keep the existing package ID `dev.canopy.synergywebos`.**
 
 Reasons:
 
@@ -120,7 +120,7 @@ Reasons:
 
 The package metadata in [`appinfo.json`](appinfo.json) is therefore:
 
-- id: `dev.hurrspice.synergywebos`
+- id: `dev.canopy.synergywebos`
 - title: `SynergyWebOS`
 - version: `0.3.2`
 - vendor: `Ryan Spice-Finnie`

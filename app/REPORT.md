@@ -6,7 +6,7 @@
 helper, Windows-key Home, Alt-hold Home and the dock catalog were exercised on
 the target firmware.
 **Brand:** SynergyWebOS `0.3.2`
-**Package ID:** `dev.hurrspice.synergywebos` (kept for in-place upgrade)
+**Package ID:** `dev.canopy.synergywebos` (kept for in-place upgrade)
 
 ## What landed
 
@@ -117,7 +117,7 @@ SynergyWebOS's `getCatalog()` first asks the root helper for `listApps`,
 `getForegroundAppInfo` and `dev/running`. On the TV this returned 64 apps with
 SynergyWebOS foreground, YouTube and the dock running. `openDock()` writes a compact
 `catalog.js` (absolute `file://` icon paths, running IDs, foreground) into the
-dock package and launches `dev.hurrspice.tvdock`. The dock reloads `catalog.js`
+dock package and launches `dev.canopy.tvdock`. The dock reloads `catalog.js`
 on visibility, sorts open/foreground apps first, and marks each entry
 `Foreground`, `Running` or `Open`.
 
@@ -140,7 +140,7 @@ button. The built-in Apps view is the fallback when the dock is not installed.
 | Unit tests | 29/29 pass |
 | Acceptance tests | 36 pass, 1 skip (no local POSIX `sh`; TV busybox syntax already passed) |
 | Python syntax / Node syntax | pass |
-| TV install | `ares-install` success over `dev.hurrspice.synergywebos` |
+| TV install | `ares-install` success over `dev.canopy.synergywebos` |
 | Root probe | `is_root=true`, `uinput_access=true`, Python 3.12.6 |
 | Helper snapshot | succeeds; UI shows **Ready** |
 | Windows-key Home | foreground became `com.webos.app.home` |

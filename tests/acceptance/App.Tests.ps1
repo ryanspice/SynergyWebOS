@@ -20,7 +20,7 @@ $map['app: appinfo.json exists and passes the webOS contract'] = {
 $map['app: package identity is the upgrade-compatible id and >= installed 0.1.8'] = {
     if (-not (Test-Path -LiteralPath $appinfoPath)) { Block-Test 'app/appinfo.json missing' }
     $ai = Get-AppinfoObject
-    Assert-Equal 'dev.hurrspice.synergywebos' $ai.id 'BRAND.md: keep the existing ID for in-place upgrade'
+    Assert-Equal 'dev.canopy.synergywebos' $ai.id 'BRAND.md: keep the existing ID for in-place upgrade'
     $v = [version]$ai.version
     Assert-True ($v -ge [version]'0.1.9') ("version $($ai.version) must exceed the installed 0.1.8")
 }

@@ -115,7 +115,7 @@ the path the TV returns with a letter fallback. The grid is keyboard-navigable
 
 ### Companion dock
 
-- Proposed standalone ID: `dev.hurrspice.tvdock`.
+- Proposed standalone ID: `dev.canopy.tvdock`.
 - The Apps view reserves the `#dockSlot` / `data-dock-slot="junction"` card as
   the visual integration point. The current card launches the standalone app;
   if Terra 2/lead embeds a dock instead, replace or append within that slot and
@@ -174,7 +174,7 @@ service exit code is not visual proof.
 ### Package
 
 - Source root: `app/`
-- Package ID: `dev.hurrspice.synergywebos` (upgrade-compatible; see `BRAND.md`)
+- Package ID: `dev.canopy.synergywebos` (upgrade-compatible; see `BRAND.md`)
 - Version: `0.3.2`
 - Entry: `index.html`
 - Icons: `icon.png`, `icon-large.png`
@@ -182,7 +182,7 @@ service exit code is not visual proof.
 - No npm install, no bundler, no Node on TV.
 
 Include the `client/` directory in the package; the UI resolves `tvctl.sh` at
-`/media/developer/apps/usr/palm/applications/dev.hurrspice.synergywebos/` and
+`/media/developer/apps/usr/palm/applications/dev.canopy.synergywebos/` and
 also checks the two fallback install roots.
 
 Do not package local preview/cache files (`.preview*`, `.edge-profile*`) or
