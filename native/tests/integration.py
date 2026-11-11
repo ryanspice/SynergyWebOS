@@ -59,11 +59,14 @@ def main():
     with tempfile.TemporaryDirectory(prefix="syn-it-", dir="/tmp") as temp:
         root = Path(temp)
         os.chmod(root, 0o755)
+        once_only = subprocess.run([DAEMON, "--runtime-dir", temp, "--once"], capture_output=True, text=True, timeout=3)
+        check(once_only.returncode != 0 and "--once requires" in once_only.stderr, "--once requires start")
         daemon = subprocess.Popen([DAEMON, "--runtime-dir", temp], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         try:
             wait(lambda: (root / "control.sock").is_socket())
             status = rpc(root, "status")
             check(status["ok"] and not status["client"]["running"], "idle startup does not connect")
+            check(status["schema"] == 1, "control schema advertised")
             check(status["saved_config"]["dry_run"], "dry-run default")
             probe = rpc(root, "probe")
             check(probe["ok"] and not probe["devices_created"] and not probe["webos_build"], "probe is not input activation")

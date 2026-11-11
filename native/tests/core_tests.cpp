@@ -85,6 +85,7 @@ namespace {
         Recorder input;
         std::vector<Bytes> sent;
         std::vector<Action> actions;
+        int resets=0;
         Session session;
         explicit Harness(Config c={
         }
@@ -92,6 +93,8 @@ namespace {
             sent.push_back(v);}
         ,[&](Action a){
             actions.push_back(a);}
+        ,[&]{
+            ++resets;}
         ){
         }
         void handshake(){
@@ -300,6 +303,15 @@ namespace {
                 Action::CycleBackward}
             ,"Alt Shift Tab and hold cancellation");
             check(h.input.count('k',15,1)==0,"Tab consumed");
+            check(h.resets==1,"cycle cache reset on first Alt hold");
+        }
+        {
+            Harness h;
+            h.active();
+            h.session.handle(key("DKDN",0xefea,4,0x138),200);
+            h.session.handle(key("DKUP",0xefea,4,0x138),201);
+            h.session.handle(key("DKDN",0xefea,4,0x138),202);
+            check(h.resets==2,"cycle cache reset on each Alt hold");
         }
         {
             Config c;
