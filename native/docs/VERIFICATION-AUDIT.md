@@ -16,6 +16,7 @@ handoff CTest/sanitizer claims were read from its logs.
 |---|---|
 | Host Release CTest | 4/4 pass |
 | Host ASan/UBSan CTest (UI off) | 4/4 pass |
+| Native UI QA (Xvfb/llvmpipe) | 17/17 checks; Diagnostics shows `0.4.0` |
 | ARM32 cross-build | ELF32 ARM for all three executables; stage audit PASS |
 | ARM IPK | `dev.canopy.synergywebos_0.4.0_arm.ipk`, SHA-256 `4801e597…bd501` |
 

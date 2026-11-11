@@ -19,6 +19,17 @@ TV install, uinput, jail/socket access, root provisioning or GLES behavior.
 Host toolchain observed: CMake 3.28.3, Ninja 1.11.1, GCC 13.3 (host),
 SDL2 2.30.0, FreeType 26.1.20 headers, json-c 0.17, libpng 1.6.43.
 
+## Native UI check
+
+`native/tests/native_qa.py` under Xvfb with software GLES
+(`LIBGL_ALWAYS_SOFTWARE=1 MESA_GLES_VERSION_OVERRIDE=2.0`):
+
+- **17/17 checks pass**: 720p/1080p/4K rendering, pointer mapping, D-pad/OK/Back,
+  text edit/apply/cancel and on-screen keyboard.
+- Screenshots: `.ai/evidence/ui-qa-20261111/`; the Diagnostics capture shows
+  `SynergyWebOS 0.4.0`.
+- Renderer: llvmpipe / Mesa GLES 2.0. **Host rendering only, not TV GLES.**
+
 ## ARM32 target build
 
 Environment (verified SkiFree recipe):

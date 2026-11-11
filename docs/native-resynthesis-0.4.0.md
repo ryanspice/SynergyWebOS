@@ -205,6 +205,8 @@ The target-build gap is now partly closed locally in WSL `WebOSBuild`:
 - **P1 update in this build:** control-schema negotiation (daemon `schema` + UI
   mismatch warning), per-hold Alt+Tab cache reset with a regression test, and
   `--once`/schema-advertisement integration checks.
+- **Native UI QA:** 17/17 checks under Xvfb/llvmpipe, including 720p/1080p/4K,
+  pointer mapping and D-pad/Back; the Diagnostics capture shows `0.4.0`.
 - **ARM32:** the Starfish SDK 11.2.0 Clang build produced ARM32 ELF for all
   three executables; `audit-stage.py` passed; the staged IPK is
   `dev.canopy.synergywebos_0.4.0_arm.ipk`, 2,793,826 bytes, SHA-256
