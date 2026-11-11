@@ -1,4 +1,4 @@
-# SynergyWebOS by Ryan Spice-Finnie
+# Synergy for WebOS
 
 [![Version: 0.3.4](https://img.shields.io/badge/version-0.3.4-b88a3b)](docs/release.md) [![Platform: LG webOS TV](https://img.shields.io/badge/platform-LG_webOS_TV-a50034)](docs/building.md) [![Target: web (all)](https://img.shields.io/badge/target-all_web-555555)](TESTING.md) [![TV evidence: LG C3](https://img.shields.io/badge/TV_evidence-LG_C3-6b8e23)](app/REPORT.md) [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE) [![App ID: dev.canopy.synergywebos](https://img.shields.io/badge/app_id-dev.canopy.synergywebos-lightgrey)](app/BRAND.md)
 
