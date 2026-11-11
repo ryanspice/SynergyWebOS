@@ -1,5 +1,7 @@
 # SynergyWebOS by Ryan Spice-Finnie
 
+[![Version: 0.3.4](https://img.shields.io/badge/version-0.3.4-b88a3b)](docs/release.md) [![Platform: LG webOS TV](https://img.shields.io/badge/platform-LG_webOS_TV-a50034)](docs/building.md) [![Target: web (all)](https://img.shields.io/badge/target-all_web-555555)](TESTING.md) [![TV evidence: LG C3](https://img.shields.io/badge/TV_evidence-LG_C3-6b8e23)](app/REPORT.md) [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE) [![App ID: dev.canopy.synergywebos](https://img.shields.io/badge/app_id-dev.canopy.synergywebos-lightgrey)](app/BRAND.md)
+
 **SynergyWebOS** (*"Your desk, on the TV."*) is a TV-first Synergy experience for LG
 webOS televisions: a TV app plus a companion dock/app switcher that brings your
 desktop keyboard and mouse to the TV through a small, configurable handoff
@@ -10,9 +12,7 @@ corner.
 - The repository name `synergy-tv` is retained; the package ID remains the
   existing one for upgrade compatibility.
 
-[![Version: 0.3.4](https://img.shields.io/badge/version-0.3.4-b88a3b)](docs/release.md) [![Platform: LG webOS TV](https://img.shields.io/badge/platform-LG_webOS_TV-a50034)](docs/building.md) [![Runtime: static web app](https://img.shields.io/badge/runtime-static_web_app-0078d4)](docs/building.md) [![Target: web (all)](https://img.shields.io/badge/target-all_web-555555)](TESTING.md) [![TV evidence: LG C3](https://img.shields.io/badge/TV_evidence-LG_C3-6b8e23)](app/REPORT.md) [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE) [![App ID: dev.hurrspice.synergywebos](https://img.shields.io/badge/app_id-dev.hurrspice.synergywebos-lightgrey)](app/BRAND.md)
-
-**Status:** working local build — SynergyWebOS `0.3.4` is packaged, installed and exercised on the owner's LG C3; static web app (Chromium 87 floor, tested on Chromium 132 / webOS 26). Physical acceptance recorded in [`app/REPORT.md`](app/REPORT.md) and [`docs/testing.md`](docs/testing.md). No remote/push is configured.
+**Status:** working local build — SynergyWebOS `0.3.4` is packaged, installed and exercised on the owner's LG C3 (Chromium 87 floor, tested on Chromium 132 / webOS 26). Physical acceptance recorded in [`app/REPORT.md`](app/REPORT.md) and [`docs/testing.md`](docs/testing.md). No remote/push is configured. See [`docs/bridging-map.md`](docs/bridging-map.md) for a comparison with a native C++20 port.
 
 ## What it is meant to be
 
