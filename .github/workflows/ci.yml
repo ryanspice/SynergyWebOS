@@ -4,9 +4,9 @@
 #   1. repo-guards  — always runs; no dependency install. Repository hygiene
 #                     (no secrets/backups/proprietary files) and docs links.
 #   2. detect-build — reports whether a build entry point exists yet.
-#   3. build-test   — runs only once the build workstream has landed
-#                     scripts/build/build.ps1 (or package.json + lockfile).
-#                     It is skipped, not failed, while the repo is scaffolding.
+#   3. build-test   — legacy web 0.3.4 build/package + suite on Windows. It is
+#                     migration source, not the native 0.4.0 artifact.
+#   4. native       — native C++20 Release + CTest and ASan/UBSan on Linux.
 #
 # Live TV/PC checks are NOT part of CI. They require a rooted TV and the live
 # Synergy server and are recorded as maintainer acceptance (docs/testing.md).
@@ -70,7 +70,7 @@ jobs:
           }
 
   build-test:
-    name: Build + test
+    name: Legacy web build + test
     needs: detect-build
     if: needs.detect-build.outputs.present == 'true'
     runs-on: windows-latest
@@ -106,3 +106,38 @@ jobs:
       - name: Test
         shell: pwsh
         run: ./tests/lib/Run-Tests.ps1
+
+  native:
+    name: Native 0.4.0 (Linux host)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PYTHONUTF8: '1'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install native dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake ninja-build python3 \
+            libsdl2-dev libfreetype6-dev libjson-c-dev libpng-dev
+
+      - name: Configure Release
+        run: cmake -S native -B native/build/ci -G Ninja -DCMAKE_BUILD_TYPE=Release -DSYNERGY_STRICT=ON
+
+      - name: Build Release
+        run: cmake --build native/build/ci --parallel 4
+
+      - name: Test Release
+        run: ctest --test-dir native/build/ci --output-on-failure
+
+      - name: Configure ASan/UBSan
+        run: cmake -S native -B native/build/asan -G Ninja -DCMAKE_BUILD_TYPE=Debug -DSYNERGY_STRICT=ON -DSYNERGY_SANITIZE=ON -DSYNERGY_BUILD_UI=OFF
+
+      - name: Build ASan/UBSan
+        run: cmake --build native/build/asan --parallel 4
+
+      - name: Test ASan/UBSan
+        run: ctest --test-dir native/build/asan --output-on-failure

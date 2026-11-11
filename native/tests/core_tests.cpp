@@ -407,7 +407,7 @@ namespace {
             validate_runtime(path,true);
             atomic_private_write(path/"config","original");
             check(read_private_file(path/"config")=="original","atomic state readwrite");
-            symlink("config",(path/"alias").c_str());
+            check(symlink("config",(path/"alias").c_str())==0,"test symlink created");
             rejects([&]{
                 read_private_file(path/"alias");}
             ,"symlink read rejected");
