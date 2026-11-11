@@ -1,5 +1,6 @@
 #include "spice/render.hpp"
 #include "synergy/ipc.hpp"
+#include "synergy/protocol.hpp"
 #include <unistd.h>
 #include <atomic>
 #include <chrono>
@@ -87,7 +88,7 @@ namespace synergy {
             spice::Sdl& sdl_;
             std::vector<Button> buttons_;
             std::string focus_="tab-link", editing_, edit_text_, old_focus_;
-            bool uppercase_=false, loaded_=false, pending_start_=false, status_pending_=false;
+            bool uppercase_=false, loaded_=false, pending_start_=false, status_pending_=false, schema_warned_=false;
             int64_t refresh_=0;
             Json status_,probe_;
             Config config_;
@@ -189,6 +190,14 @@ namespace synergy {
                     }
                     if(tag=="status") {
                         status_=result;
+                        const auto schema=static_cast<int>(status_.get("schema").num(-1));
+                        if(schema!=synergy::ControlSchema) {
+                            if(!schema_warned_) {
+                                say("Daemon control schema "+std::to_string(schema)+" does not match UI schema "+std::to_string(synergy::ControlSchema)+"; update the app/daemon pair.",true);
+                                schema_warned_=true;
+                            }
+                        }
+                        else schema_warned_=false;
                         if(!loaded_){
                             config_=Config::from_json(status_.get("saved_config"));
                             loaded_=true;

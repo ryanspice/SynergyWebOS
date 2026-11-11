@@ -60,8 +60,8 @@ Result:
 | Field | Value |
 |---|---|
 | Artifact | `dev.canopy.synergywebos_0.4.0_arm.ipk` |
-| Size | 2,786,080 bytes |
-| SHA-256 | `74310a3976d0af0dae6a4135bf4b44a2f26b3431f862b151a53ad576fbe822bf` |
+| Size | 2,793,826 bytes |
+| SHA-256 | `4801e5971ea8827daa0a9d0dfbc149885eeee799c8fb4e8b45ac137f7a9bd501` |
 | Package / version / arch | `dev.canopy.synergywebos` / `0.4.0` / `arm` |
 | App metadata | `type: native`, `main: synergy-tv` |
 | Modes | executables **755**, data **644** (rebuilt on ext4; `/mnt/b` ignores chmod) |

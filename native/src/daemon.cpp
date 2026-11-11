@@ -149,7 +149,7 @@ namespace synergy {
             if(op=="status"||op=="snapshot"||op=="logs"){
                 auto result=okay();
                 result.set("version",Json::string(SYNERGY_VERSION));
-                result.set("schema",Json::number(1));
+                result.set("schema",Json::number(synergy::ControlSchema));
                 result.set("pid",Json::number(getpid()));
                 result.set("controller_uid",Json::number(controller));
                 result.set("client",client.snapshot());

@@ -38,7 +38,7 @@ SDK 11.2.0:
 - Host checks: Release and ASan/UBSan **4/4 CTest** each.
 - Candidate IPK (untracked):
   `.ai/evidence/native-arm-20261111/ipk-final/dev.canopy.synergywebos_0.4.0_arm.ipk`,
-  SHA-256 `74310a3976d0af0dae6a4135bf4b44a2f26b3431f862b151a53ad576fbe822bf`.
+  SHA-256 `4801e5971ea8827daa0a9d0dfbc149885eeee799c8fb4e8b45ac137f7a9bd501`.
 
 If the source has not changed, install **that exact IPK** and record its SHA
 instead of rebuilding. Rebuild only from a clean commit, and re-run the stage

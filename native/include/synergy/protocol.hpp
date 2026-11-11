@@ -7,6 +7,7 @@
 #include <vector>
 namespace synergy {
 using Bytes=std::vector<uint8_t>;
+constexpr int ControlSchema=1;
 class FrameDecoder {
     Bytes buffer_;
 public:

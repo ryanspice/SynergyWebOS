@@ -202,10 +202,13 @@ in section 4, plus the native CI/release path.
 The target-build gap is now partly closed locally in WSL `WebOSBuild`:
 
 - **Host Release and ASan/UBSan:** 4/4 CTest suites pass in each build.
+- **P1 update in this build:** control-schema negotiation (daemon `schema` + UI
+  mismatch warning), per-hold Alt+Tab cache reset with a regression test, and
+  `--once`/schema-advertisement integration checks.
 - **ARM32:** the Starfish SDK 11.2.0 Clang build produced ARM32 ELF for all
   three executables; `audit-stage.py` passed; the staged IPK is
-  `dev.canopy.synergywebos_0.4.0_arm.ipk`, 2,786,080 bytes, SHA-256
-  `74310a3976d0af0dae6a4135bf4b44a2f26b3431f862b151a53ad576fbe822bf`.
+  `dev.canopy.synergywebos_0.4.0_arm.ipk`, 2,793,826 bytes, SHA-256
+  `4801e5971ea8827daa0a9d0dfbc149885eeee799c8fb4e8b45ac137f7a9bd501`.
 - The package bundles ARM SDL2 2.32.10, json-c 5.3.0 and zlib 1.3.1 with
   licences; FreeType is resolved from the TV at runtime. Max symbol
   requirements are `GLIBC_2.38` / `GLIBCXX_3.4.32`.
