@@ -30,6 +30,7 @@ public:
     uint64_t generation()const{return generation_.load();}
     void cancel(){++generation_;}
     bool post(std::string kind,bool dry=false,uint64_t generation=0);
+    void reset_cycle(uint64_t generation);
     void action(Action,bool dry,uint64_t generation);
     Json snapshot()const;
 };

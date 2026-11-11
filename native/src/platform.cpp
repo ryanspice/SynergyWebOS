@@ -135,7 +135,7 @@ namespace synergy {
         status_=s;
     }
     bool Platform::post(std::string kind,bool dry,uint64_t gen){
-        if(kind!="home"&&kind!="cycle+"&&kind!="cycle-")throw std::runtime_error("Unknown platform action");
+        if(kind!="home"&&kind!="cycle+"&&kind!="cycle-"&&kind!="cycle-reset")throw std::runtime_error("Unknown platform action");
         std::lock_guard lock(mutex_);
         if(stopping_||work_.size()>=8)return false;
         work_.push_back({
@@ -143,6 +143,9 @@ namespace synergy {
         );
         cv_.notify_one();
         return true;
+    }
+    void Platform::reset_cycle(uint64_t gen){
+        if(!post("cycle-reset",false,gen))update("TV action queue full; cycle cache not reset");
     }
     void Platform::action(Action a,bool dry,uint64_t gen){
         if(!post(a==Action::Home?"home":a==Action::CycleForward?"cycle+":"cycle-",dry,gen))update("TV action queue full; request rejected");
@@ -197,7 +200,13 @@ namespace synergy {
                 w=std::move(work_.front());
                 work_.pop_front();
             }
-            if(w.generation&&w.generation!=generation())continue;
+            if(w.generation&&w.generation!=generation()){update("Action dropped: capture ended");continue;}
+            if(w.kind=="cycle-reset"){
+                cycle_.clear();
+                cycle_at_=0;
+                cycle_generation_=0;
+                continue;
+            }
             try{
                 if(w.dry){
                     update("DRY RUN: "+w.kind+" (no TV service call)");
@@ -219,7 +228,7 @@ namespace synergy {
                     target=cycle_[static_cast<size_t>(cycle_index_)];
                     cycle_at_=now;
                 }
-                if(w.generation&&w.generation!=generation())continue;
+                if(w.generation&&w.generation!=generation()){update("Action dropped: capture ended");continue;}
                 if(!safe_app_id(target))throw std::runtime_error("Invalid application ID");
                 auto payload=Json::object();
                 payload.set("id",Json::string(target));

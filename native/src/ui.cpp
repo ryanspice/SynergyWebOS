@@ -499,6 +499,7 @@ namespace synergy {
                     text_line(r,"uinput writable: "+std::string(probe_.get("uinput_writable").flag()?"yes":"not established"),1224,590,620,24);
                     text_line(r,"Peer authentication: Unix UID",1224,636,620,24);
                     text_line(r,"Shared app UID is a shared trust boundary.",1224,682,620,22,Amber);
+                    text_line(r,"SynergyWebOS "+std::string(SYNERGY_VERSION),1224,712,620,22);
                     text_line(r,r.renderer,1224,758,620,22);
                     text_line(r,r.version,1224,801,620,22);
                     text_line(r,last_key_,64,936,1740,21);
@@ -629,7 +630,7 @@ namespace synergy {
         sdl.GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION,0);
         sdl.GL_SetAttribute(SDL_GL_DOUBLEBUFFER,1);
         sdl.GL_SetAttribute(SDL_GL_DEPTH_SIZE,0);
-        window.window=sdl.CreateWindow("SynergyWebOS | Native",SDL_WINDOWPOS_CENTERED,SDL_WINDOWPOS_CENTERED,width,height,SDL_WINDOW_OPENGL|SDL_WINDOW_SHOWN|SDL_WINDOW_RESIZABLE|SDL_WINDOW_ALLOW_HIGHDPI|(fullscreen?SDL_WINDOW_FULLSCREEN_DESKTOP:0));
+        window.window=sdl.CreateWindow(("SynergyWebOS "+std::string(SYNERGY_VERSION)+" | Native").c_str(),SDL_WINDOWPOS_CENTERED,SDL_WINDOWPOS_CENTERED,width,height,SDL_WINDOW_OPENGL|SDL_WINDOW_SHOWN|SDL_WINDOW_RESIZABLE|SDL_WINDOW_ALLOW_HIGHDPI|(fullscreen?SDL_WINDOW_FULLSCREEN_DESKTOP:0));
         if(!window.window)throw std::runtime_error(sdl.GetError());
         window.gl=sdl.GL_CreateContext(window.window);
         if(!window.gl)throw std::runtime_error(sdl.GetError());
