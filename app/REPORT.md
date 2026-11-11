@@ -8,7 +8,8 @@
 helper, Windows-key Home, Alt-hold Home and the dock catalog were exercised on
 the target firmware.
 **Brand:** SynergyWebOS `0.3.2`
-**Package ID:** `dev.canopy.synergywebos` (kept for in-place upgrade)
+**Package ID:** `dev.hurrspice.synergywebos` at the time of this 0.3.2 report;
+the source was later renamed to `dev.canopy.synergywebos` (see D-012).
 
 ## What landed
 
@@ -142,7 +143,7 @@ button. The built-in Apps view is the fallback when the dock is not installed.
 | Unit tests | 29/29 pass |
 | Acceptance tests | 36 pass, 1 skip (no local POSIX `sh`; TV busybox syntax already passed) |
 | Python syntax / Node syntax | pass |
-| TV install | `ares-install` success over `dev.canopy.synergywebos` |
+| TV install | `ares-install` success over `dev.hurrspice.synergywebos` (historical ID; later renamed to canopy — D-012) |
 | Root probe | `is_root=true`, `uinput_access=true`, Python 3.12.6 |
 | Helper snapshot | succeeds; UI shows **Ready** |
 | Windows-key Home | foreground became `com.webos.app.home` |

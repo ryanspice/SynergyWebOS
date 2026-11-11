@@ -110,12 +110,14 @@ time the client starts." A failed action says what failed and what still works.
 
 ## 3. App identity
 
-**Recommendation: keep the existing package ID `dev.canopy.synergywebos`.**
+**Recommendation: keep the package ID `dev.canopy.synergywebos` for this build.**
 
 Reasons:
 
-1. **In-place upgrade.** webOS installs a higher version over the same app ID.
-   The user keeps one app entry and does not run two clients.
+1. **Same-ID upgrade.** webOS installs a higher version over the same app ID. A
+   TV already on `dev.canopy.synergywebos` keeps one entry. A TV still on the
+   earlier `dev.hurrspice.synergywebos` install gets a second app, not an
+   in-place upgrade; follow D-012 for that migration.
 2. **Stable paths.** The installed application directory, the startup hook and
    the desktop's screen name (`webos-tv`) keep working during the rebrand.
 3. **Less re-authorization.** A new ID is a second app with its own permissions
@@ -141,8 +143,9 @@ ID for unrelated software.
 
 1. Stop the current client through the lead's controlled procedure; do not
    start two clients against one screen.
-2. Install the new IPK over the existing package ID. The higher version replaces
-   the UI and static files in place.
+2. Install the new IPK over the existing canopy package ID. The higher version
+   replaces the UI and static files in place. A `dev.hurrspice.*` install is a
+   second app; follow D-012 instead.
 3. Keep the Synergy screen name `webos-tv` until the desktop configuration is
    deliberately changed. Renaming the screen without updating the desktop breaks
    the link.

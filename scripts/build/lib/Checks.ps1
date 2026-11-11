@@ -521,17 +521,19 @@ $script:TvWebUnsafe = @(
 function Test-TvStaticCompat {
     <# Flags browser features newer than the target webOS Chromium floor (manifest targetChromium).
        Dot-entries (local browser profiles, preview scripts such as .metrics.mjs) are not packaged
-       TV runtime sources and are skipped. #>
+       TV runtime sources and are skipped. The skip is relative to the app directory, not the repo:
+       project-local TEMP fixtures under .ai/ must still be scanned. #>
     param(
         [Parameter(Mandatory)][string]$AppDir,
         [int]$TargetChromium = 108
     )
     $issues = @()
     if (-not (Test-Path -LiteralPath $AppDir)) { @() }
+    $appRoot = (Resolve-Path -LiteralPath $AppDir).Path.TrimEnd([char[]]@([char]92, [char]47))
     # Explicit loop (not Where-Object): a single match would unroll into the FileInfo itself.
     $files = [System.Collections.Generic.List[System.IO.FileInfo]]::new()
     foreach ($candidate in @(Get-ScannedFiles -Root $AppDir -Include '*.js', '*.mjs', '*.html', '*.css')) {
-        $crel = Get-RelativeRepoPath $candidate.FullName
+        $crel = $candidate.FullName.Substring($appRoot.Length).TrimStart([char[]]@([char]92, [char]47))
         if (-not [System.IO.Path]::GetFileName($crel).StartsWith('.') -and $crel -notmatch '(?i)(^|/)\.') { $files.Add($candidate) }
     }
     foreach ($f in $files) {

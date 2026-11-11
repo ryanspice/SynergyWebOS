@@ -144,6 +144,9 @@ web app was also red before this import and is fixed here.
 - Corrected D-007's false history and added D-012 (identity/migration/rollback).
 - Fixed the imported `Pipeline.Tests.ps1` stale-ID assertion, the repo-guard
   case sensitivity, the IPK ustar-prefix parser, and the `.ai` artifact scan.
+- Made the TV-compat dot-entry skip app-relative, so project-local TEMP under
+  `.ai` no longer fails three tests; corrected the blanket-renamed historical
+  identity evidence in `app/REPORT.md`.
 - Made `native/tests/bundle_tests.py` UTF-8 and `.ai`-aware.
 - Updated `INTENT.md`, `TESTING.md`, `SECURITY.md`, `app/BRAND.md` to the native
   product; fixed the legacy web UI's 0.3.2 labels and the remaining live 0.3.2
@@ -159,13 +162,15 @@ Rollback: branch `legacy-web-0.3.4` / tag `v0.3.4-web` at the pre-import HEAD.
 manifest are handoff-only and not tracked; the source tree is the reproducible
 artefact. Checks after these fixes: docs links PASS (49 files / 145 links), repo
 guards PASS (0 violations), native bundle tests 8/8, legacy suite 69 pass / 0
-fail / 1 skip (no POSIX `sh`).
+fail / 1 skip (no POSIX `sh`) both with default TEMP and with project-local TEMP
+under `.ai`.
 
 ## 6. Prior-thread reconciliation (re-read against commit `00207e1`)
 
 Thread `40f3e519` is complete. Thread `7c27ad6d` is still running and has no
-final report; after the import landed it began re-reviewing the moved tree, so
-its partial findings are used but not treated as a finished review.
+final report; its run 3 added deterministic test findings (one of which was a
+real gap in the import fix), so its partial findings are used but not treated as
+a finished review.
 
 | Prior claim | Status against the native build |
 |---|---|
@@ -177,12 +182,14 @@ its partial findings are used but not treated as a finished review.
 | 40f3e519: status polling can stall on overlap | **Old prototype.** The native control plane has a different, lower-severity serial-stall risk (N7), not the same defect. |
 | 40f3e519: repo guard false positives, 71/3 test baseline | **Fixed.** Guard 0 violations; legacy suite 69/0/1; native bundle tests 8/8. |
 | 40f3e519 acceptance budgets (cold boots, handoffs, reconnects, idle soak) | **Still valid** and adopted below, extended with UID/jail/ARM/IPK gates. |
-| 7c27ad6d: CI is red (guard, IPK reader, `.ai` scan) | **Fixed locally** (guard `(?-i)`, ustar-prefix parser, `.ai` exclusion); remote CI has not been re-observed, and no native job exists yet. |
+| 7c27ad6d: CI is red (guard, IPK reader, `.ai` scan) | **Fixed locally** (guard `(?-i)`, ustar-prefix parser, `.ai` exclusion); remote CI was observed green on `00207e1`, but no native job exists yet. |
 | 7c27ad6d: app-ID rename breaks in-place upgrade; D-007 is false | **Corrected.** D-007 now records hurrspice→canopy; D-012 requires a migration/rollback release note. |
 | 7c27ad6d: About/footer says 0.3.2 | **Fixed** in the legacy UI; remaining 0.3.2/hurrspice text lives only in banner-labelled historical reports. |
 | 7c27ad6d: dock IPK is stale/mismatched; the build does not package it | **Retired.** The dock cannot be shipped because it no longer exists in the tree. |
 | 7c27ad6d: cursor keepalive thread safety | **Superseded.** The native keepalive runs on the session thread; the remaining issue is visibility/drift on hardware. |
-| 7c27ad6d: `.ai` scratch breaks scans | **Fixed** in `Checks.ps1` and `bundle_tests.py`. |
+| 7c27ad6d: `.ai` scratch breaks scans | **Partially fixed at import** (forbidden-artifact scan) and **completed now**: the TV-compat filter still skipped dot-segments, failing 3 tests when TEMP is project-local under `.ai`. The skip is now app-relative; suite 69/0/1 with TEMP under `.ai`. |
+| 7c27ad6d: historical evidence was blanket-renamed to canopy | **Corrected.** `app/REPORT.md:11,145` again records the 0.3.2 install under `dev.hurrspice`; `app/BRAND.md` and `app/INTEGRATION.md` distinguish same-ID upgrades from the hurrspice→canopy migration (D-012). |
+| 7c27ad6d: remote CI status | **Observed green on `00207e1`** (all three jobs) by the MiniMax thread; `72d93eb` and later are not yet observed. |
 | 7c27ad6d: 74-pass vs 71/3-pass conflict | **Reconciled by command/environment.** The maintained result is 69/0/1 (legacy) plus 8/8 native bundle tests; prior totals depended on TEMP and `.ai` fixtures. |
 | 7c27ad6d: final review | **Not delivered.** The thread is still running; its partial findings above were incorporated and checked against the new tree. |
 

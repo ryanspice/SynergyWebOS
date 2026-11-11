@@ -207,7 +207,8 @@ command, output name, hash and release artifact.
 
 1. Coordinate a quiet window; stop the live client first so the installed files
    are not replaced underneath a running process.
-2. Install the new IPK over the same ID (version 0.3.2 > 0.1.8).
+2. Install the new IPK over the same canopy ID (version 0.3.4 > 0.1.8); a
+   `dev.hurrspice.*` install is a second app — see D-012.
 3. Keep the desktop screen name and current Synergy config unchanged for the
    first launch.
 4. Open SynergyWebOS, run **Probe TV**, confirm root + writable uinput.
