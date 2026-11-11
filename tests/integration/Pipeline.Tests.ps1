@@ -122,7 +122,7 @@ $map['pipeline: release IPK payload matches the app contract (id, version, clien
     Assert-True ($files.ControlFiles.ContainsKey('control')) 'IPK has a control file'
     $control = [System.Text.Encoding]::UTF8.GetString($files.ControlFiles['control'])
     Assert-Match $control ("(?m)^Version:\s*" + [regex]::Escape($ai.version)) 'control Version matches appinfo'
-    Assert-Match $control '(?m)^Package:\s*dev\.hurrspice\.synergywebos' 'control Package matches appinfo id'
+    Assert-Match $control '(?m)^Package:\s*dev\.canopy\.synergywebos' 'control Package matches appinfo id'
     Assert-Match $control '(?m)^Architecture:\s*all' 'architecture all (no TV CPU-specific binaries)'
     "$($ipk.Name): $($files.AppFiles.Count) files, id=$($ai.id) v=$($ai.version)"
 }
