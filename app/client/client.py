@@ -24,7 +24,7 @@ import time
 from typing import Dict, Optional, Set, Tuple
 
 APP_NAME = "SynergyWebOS"
-APP_VERSION = "0.3.3"
+APP_VERSION = "0.3.4"
 CURSOR_KEEPALIVE_S = 2.0  # nudge the TV pointer after this much idle time while parked
 DEFAULT_PORT = 24800
 PROTOCOL_MAJOR = 1
