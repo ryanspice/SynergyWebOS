@@ -24,7 +24,8 @@ import time
 from typing import Dict, Optional, Set, Tuple
 
 APP_NAME = "SynergyWebOS"
-APP_VERSION = "0.3.2"
+APP_VERSION = "0.3.3"
+CURSOR_KEEPALIVE_S = 2.0  # nudge the TV pointer after this much idle time while parked
 DEFAULT_PORT = 24800
 PROTOCOL_MAJOR = 1
 PROTOCOL_MINOR = 4
@@ -162,6 +163,11 @@ class InputBackend:
 
     def wheel(self, horizontal: int, vertical: int) -> None:
         raise NotImplementedError
+
+    def nudge(self) -> None:
+        # Net-zero 1px wiggle: keeps the TV pointer visible without moving it.
+        self.move(1, 0)
+        self.move(-1, 0)
 
     def close(self) -> None:
         pass
@@ -308,6 +314,7 @@ class SynergyClient:
         self.active = False
         self.sequence = 0
         self.last_mouse: Optional[Tuple[int, int]] = None
+        self.last_motion = 0.0
         self.pressed_keys: Set[int] = set()
         self.pressed_buttons: Set[int] = set()
         self.protocol_name = b"Synergy"
@@ -569,6 +576,7 @@ class SynergyClient:
 
     def run(self) -> int:
         completed_session = False
+        threading.Thread(target=self._cursor_keepalive, daemon=True).start()
         while self.running:
             try:
                 self.write_state("connecting")
@@ -595,6 +603,22 @@ class SynergyClient:
             if self.running:
                 time.sleep(1.0)
         return 0
+
+    def _cursor_keepalive(self) -> None:
+        # webOS hides an idle pointer. While the Synergy pointer is parked on
+        # the TV, nudge it whenever no motion has arrived recently so the
+        # cursor stays visible instead of disappearing mid-use.
+        while self.running:
+            time.sleep(CURSOR_KEEPALIVE_S / 2)
+            if not self.active:
+                continue
+            if time.monotonic() - self.last_motion < CURSOR_KEEPALIVE_S:
+                continue
+            try:
+                self.backend.nudge()
+            except Exception as exc:
+                logging.debug("Cursor keepalive failed: %s", exc)
+            self.last_motion = time.monotonic()
 
     def _run_session(self) -> None:
         logging.info("Connecting to %s:%d as %s", self.host, self.port, self.name)
@@ -702,6 +726,11 @@ class SynergyClient:
                 self.last_mouse = (x, y)
             self.active = True
             logging.info("Pointer entered TV screen")
+            try:
+                self.backend.nudge()
+            except Exception as exc:
+                logging.debug("Cursor show on enter failed: %s", exc)
+            self.last_motion = time.monotonic()
             self._send_cmd(b"CNOP")
             return True
 
@@ -721,12 +750,14 @@ class SynergyClient:
                 if dx or dy:
                     self.backend.move(dx, dy)
             self.last_mouse = (x, y)
+            self.last_motion = time.monotonic()
             self._send_cmd(b"CNOP")
             return True
 
         if cmd == b"DMRM" and len(data) >= 4:
             dx, dy = struct.unpack("!hh", data[:4])
             self.backend.move(dx, dy)
+            self.last_motion = time.monotonic()
             self._send_cmd(b"CNOP")
             return True
 

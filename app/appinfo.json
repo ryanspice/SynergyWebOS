@@ -1,6 +1,6 @@
 {
   "id": "dev.hurrspice.synergywebos",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "vendor": "Ryan Spice-Finnie",
   "type": "web",
   "main": "index.html",
