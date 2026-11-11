@@ -10,11 +10,9 @@ corner.
 - The repository name `synergy-tv` is retained; the package ID remains the
   existing one for upgrade compatibility.
 
-> Status: **working local build.** SynergyWebOS `0.3.2` and SynergyWebOS Dock
-> `0.3.0` are packaged, installed and exercised on the target TV; the desktop
-> Synergy config uses a two-pixel top-left handoff and zero switch delay.
-> Physical acceptance is recorded in [`app/REPORT.md`](app/REPORT.md) and
-> [`docs/testing.md`](docs/testing.md). No remote/push is configured.
+[![Version: 0.3.4](https://img.shields.io/badge/version-0.3.4-b88a3b)](docs/release.md) [![Platform: LG webOS TV](https://img.shields.io/badge/platform-LG_webOS_TV-a50034)](docs/building.md) [![Runtime: static web app](https://img.shields.io/badge/runtime-static_web_app-0078d4)](docs/building.md) [![Target: web (all)](https://img.shields.io/badge/target-all_web-555555)](TESTING.md) [![TV evidence: LG C3](https://img.shields.io/badge/TV_evidence-LG_C3-6b8e23)](app/REPORT.md) [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE) [![App ID: dev.hurrspice.synergywebos](https://img.shields.io/badge/app_id-dev.hurrspice.synergywebos-lightgrey)](app/BRAND.md)
+
+**Status:** working local build — SynergyWebOS `0.3.4` is packaged, installed and exercised on the owner's LG C3; static web app (Chromium 87 floor, tested on Chromium 132 / webOS 26). Physical acceptance recorded in [`app/REPORT.md`](app/REPORT.md) and [`docs/testing.md`](docs/testing.md). No remote/push is configured.
 
 ## What it is meant to be
 
