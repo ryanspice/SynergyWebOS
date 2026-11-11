@@ -73,9 +73,13 @@ namespace synergy {
     }
     Bytes frame(const Bytes& p){
         if(p.size()<4||p.size()>FrameDecoder::MaxFrame)throw std::runtime_error("Invalid outgoing frame");
-        Bytes out;
-        put32(out,static_cast<uint32_t>(p.size()));
-        out.insert(out.end(),p.begin(),p.end());
+        Bytes out(p.size()+4);
+        const auto n=static_cast<uint32_t>(p.size());
+        out[0]=static_cast<uint8_t>(n>>24);
+        out[1]=static_cast<uint8_t>(n>>16);
+        out[2]=static_cast<uint8_t>(n>>8);
+        out[3]=static_cast<uint8_t>(n);
+        std::copy(p.begin(),p.end(),out.begin()+4);
         return out;
     }
     int linux_key(uint16_t id,uint16_t button){
