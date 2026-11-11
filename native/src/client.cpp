@@ -159,10 +159,13 @@ namespace synergy {
             send_frame(socket_fd.n,p,running_);}
         ,[&](Action a){
             platform_.action(a,config.dry_run,gen);}
+        ,[&]{
+            platform_.reset_cycle(gen);}
         );
         state("handshaking");
         FrameDecoder decoder;
         std::optional<int64_t> partial_at;
+        auto handshake_started=monotonic_ms();
         auto last_frame=monotonic_ms();
         std::array<uint8_t,16384> buffer{
         }
@@ -170,6 +173,7 @@ namespace synergy {
         while(running()){
             auto now=monotonic_ms();
             protocol.tick(now);
+            if(!protocol.ready()&&now-handshake_started>5000)throw std::runtime_error("Server handshake deadline exceeded");
             if(now-last_frame>(protocol.ready()?config.idle_timeout_ms:5000))throw std::runtime_error("Server idle/handshake timeout");
             if(partial_at&&now-*partial_at>5000)throw std::runtime_error("Incomplete frame deadline exceeded");
             pollfd p{

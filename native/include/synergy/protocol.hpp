@@ -30,6 +30,7 @@ class Session {
     Input& input_;
     std::function<void(const Bytes&)> send_;
     std::function<void(Action)> action_;
+    std::function<void()> cycle_reset_;
     bool hello_=false,info_=false,active_=false,tab_consumed_=false,home_fired_=false,alt_fired_=false;
     std::set<int> keys_,buttons_,meta_,alt_,synthetic_;
     std::optional<int64_t> home_due_,alt_due_;
@@ -41,7 +42,7 @@ class Session {
     void key_event(uint16_t,uint16_t,uint16_t,int,int64_t);
     void set_key(int,bool);
 public:
-    Session(Config,Input&,std::function<void(const Bytes&)>,std::function<void(Action)>);
+    Session(Config,Input&,std::function<void(const Bytes&)>,std::function<void(Action)>,std::function<void()> cycle_reset={});
     ~Session(){release();}
     Session(const Session&)=delete;
     Session& operator=(const Session&)=delete;

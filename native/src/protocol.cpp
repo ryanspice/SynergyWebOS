@@ -1,5 +1,6 @@
 #include "synergy/protocol.hpp"
 #include <algorithm>
+#include <cstdio>
 #include <array>
 #include <map>
 #include <string_view>
@@ -221,7 +222,7 @@ namespace synergy {
         if(id==13)return 28;
         return 0;
     }
-    Session::Session(Config c,Input& in,std::function<void(const Bytes&)> send,std::function<void(Action)> action):config_(std::move(c)),input_(in),send_(std::move(send)),action_(std::move(action)){
+    Session::Session(Config c,Input& in,std::function<void(const Bytes&)> send,std::function<void(Action)> action,std::function<void()> cycle_reset):config_(std::move(c)),input_(in),send_(std::move(send)),action_(std::move(action)),cycle_reset_(std::move(cycle_reset)){
     }
     void Session::command(const char* s){
         send_(bytes(s));
@@ -309,6 +310,7 @@ namespace synergy {
                     bool first=alt_.empty();
                     alt_.insert(c);
                     if(first){
+                        if(cycle_reset_)cycle_reset_();
                         alt_due_=now+5000;
                         alt_fired_=false;
                     }
@@ -352,12 +354,20 @@ namespace synergy {
         for(int c:keys_)try{
             input_.key(c,0);
         }
+        catch(const std::exception& e){
+            std::fprintf(stderr,"synergy: key release failed: %s\n",e.what());
+        }
         catch(...){
+            std::fprintf(stderr,"synergy: key release failed\n");
         }
         for(int c:buttons_)try{
             input_.button(c,0);
         }
+        catch(const std::exception& e){
+            std::fprintf(stderr,"synergy: button release failed: %s\n",e.what());
+        }
         catch(...){
+            std::fprintf(stderr,"synergy: button release failed\n");
         }
         keys_.clear();
         buttons_.clear();

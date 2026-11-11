@@ -103,11 +103,12 @@ namespace synergy {
                 return 0;
             }
             else if(a=="--help"){
-                std::cout<<"synergy-daemon "<<SYNERGY_VERSION<<"\n--runtime-dir ABS --controller-uid UID [--start-from-config] [--once]\nNo input until an explicit start request. Desktop builds are dry-run only.\n";
+                std::cout<<"synergy-daemon "<<SYNERGY_VERSION<<"\n--runtime-dir ABS --controller-uid UID [--start-from-config] [--once; requires start]\nNo input until an explicit start request. Desktop builds are dry-run only.\n";
                 return 0;
             }
             else throw std::runtime_error("Unknown daemon option: "+a);
         }
+        if(once&&!start)throw std::runtime_error("--once requires --start-from-config");
 #ifdef SYNERGY_WEBOS
         if(geteuid()!=0||!uid_given)throw std::runtime_error("Launch the daemon through the explicit root provisioning route with --controller-uid");
 #else
