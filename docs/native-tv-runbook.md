@@ -23,6 +23,27 @@ Source: `native/docs/BUILD.md` (build/stage), `native/docs/SECURITY.md`
 - [ ] The owner has approved a plaintext-input window. Real input is the last
       step, not the first.
 
+## 0a. Verified build environment (2026-11-11)
+
+The first ARM32 candidate was built locally in WSL `WebOSBuild` with the Starfish
+SDK 11.2.0:
+
+- SDK toolchain: `/usr/local/starfish-sdk-x86_64` (`OEToolchainConfig.cmake`,
+  Clang driver via `CLANGCC`/`CLANGCXX`; do not use the GCC driver, which rejects
+  the SDK's `--dyld-prefix`).
+- ARM SDL2: `/opt/sdl2-webos`; FreeType headers:
+  `spice-home-cpp/.ai/runs/20261105-tv-install/downloads/freetype-2.13.2/include`;
+  ARM libpng: `SkifreeWebOS/native/build/deps/libpng-webos`; json-c from the SDK
+  sysroot.
+- Host checks: Release and ASan/UBSan **4/4 CTest** each.
+- Candidate IPK (untracked):
+  `.ai/evidence/native-arm-20261111/ipk-final/dev.canopy.synergywebos_0.4.0_arm.ipk`,
+  SHA-256 `74310a3976d0af0dae6a4135bf4b44a2f26b3431f862b151a53ad576fbe822bf`.
+
+If the source has not changed, install **that exact IPK** and record its SHA
+instead of rebuilding. Rebuild only from a clean commit, and re-run the stage
+audit.
+
 ## 1. ARM32 build and stage
 
 Use the verified toolchain, not a guessed one. From the repo root (Linux/WSL

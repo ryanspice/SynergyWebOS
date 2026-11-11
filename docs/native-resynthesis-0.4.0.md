@@ -196,3 +196,22 @@ a finished review.
 **Net:** none of the old web-runtime findings is still a release blocker for the
 native build. The surviving blockers are the native target/root/evidence gates
 in section 4, plus the native CI/release path.
+
+## 7. Build-status update (2026-11-11)
+
+The target-build gap is now partly closed locally in WSL `WebOSBuild`:
+
+- **Host Release and ASan/UBSan:** 4/4 CTest suites pass in each build.
+- **ARM32:** the Starfish SDK 11.2.0 Clang build produced ARM32 ELF for all
+  three executables; `audit-stage.py` passed; the staged IPK is
+  `dev.canopy.synergywebos_0.4.0_arm.ipk`, 2,786,080 bytes, SHA-256
+  `74310a3976d0af0dae6a4135bf4b44a2f26b3431f862b151a53ad576fbe822bf`.
+- The package bundles ARM SDL2 2.32.10, json-c 5.3.0 and zlib 1.3.1 with
+  licences; FreeType is resolved from the TV at runtime. Max symbol
+  requirements are `GLIBC_2.38` / `GLIBCXX_3.4.32`.
+- **Still unproven:** TV install/launch, app UID and jail/socket reachability,
+  uinput, root provisioning, cold boot, GLES and pointer/modifier behavior.
+
+See [native-build-evidence-0.4.0.md](native-build-evidence-0.4.0.md) for the
+commands, paths and modes. The IPK is local/untracked and is not a published
+release.
