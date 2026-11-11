@@ -55,7 +55,7 @@ function Get-RepoFileList {
 }
 
 function Get-WorkTreeFileList {
-    $roots = @('app', 'dock', 'tools', 'scripts', 'tests', 'config', 'docs', '.github',
+    $roots = @('app', 'native', 'tools', 'scripts', 'tests', 'config', 'docs', '.github',
         'README.md', 'LICENSE', 'CONTRIBUTING.md', 'SECURITY.md', 'THIRD_PARTY_NOTICES.md',
         '.gitignore', '.gitattributes', '.editorconfig', '.githooks')
     $skipDirs = @('node_modules', 'dist', 'coverage', '.svelte-kit', '.vite', 'captures', 'secrets')
@@ -107,13 +107,13 @@ $nameRules = @(
     @{ Pattern = '(?i)(^|/)backups/'; Reason = 'backup directory' },
     # Case-sensitive: the repo's own tools/synergy/ folder must stay allowed.
     @{ Pattern = '(?i)(^|/)synergy\.conf$'; Reason = 'Synergy config snapshot' },
-    @{ Pattern = '(^|/)Synergy/|\.synergy(\.conf)?$'; Reason = 'Synergy config/bundle' },
+    @{ Pattern = '(?-i)(^|/)Synergy/|(?i)\.synergy(\.conf)?$'; Reason = 'Synergy config/bundle' },
     @{ Pattern = '(?i)(^|/)synergy-core'; Reason = 'proprietary Synergy core binary' },
     @{ Pattern = '(?i)(^|/)(db|local)\.json$'; Reason = 'Synergy database snapshot' },
     @{ Pattern = '(?i)\.asar$'; Reason = 'proprietary Electron bundle' },
     @{ Pattern = '(?i)(^|/)node_modules/'; Reason = 'dependency folder' },
     @{ Pattern = '(?i)\.ipk$'; Reason = 'built package (releases live in dist/release or releases/)' },
-    @{ Pattern = '(?i)(^|/)(/?dist|app/build|dock/build|out|coverage|\.svelte-kit|\.vite)/'; Reason = 'build output' },
+    @{ Pattern = '(?i)(^|/)(/?dist|app/build|native/build|out|coverage|\.svelte-kit|\.vite)/'; Reason = 'build output' },
     @{ Pattern = '(?i)\.(log|pid)$|(^|/)logs/'; Reason = 'log/state file' },
     @{ Pattern = '(?i)(^|/)\.webos/'; Reason = 'webOS CLI device credentials' },
     @{ Pattern = '(?i)(^|/)(secrets|credentials)/'; Reason = 'secret storage' },
@@ -144,10 +144,11 @@ else {
 $checked = 0
 
 foreach ($file in $files) {
-    # The root LICENSE file is the project license, not a license key.
-    if ($file -eq 'LICENSE') { continue }
+    # Project licence, notice and README badge files are not licence keys.
+    $isLegalDoc = $file -match '(?i)(^|/)(licen[cs]e|copying|notice)(\.(md|txt))?$' -or
+        $file -match '(?i)^docs/media/badges/[^/]+\.svg$'
     foreach ($rule in $nameRules) {
-        if ($file -match $rule.Pattern) { $violations.Add("NAME  $file  -> $($rule.Reason)") ; break }
+        if (-not $isLegalDoc -and $file -match $rule.Pattern) { $violations.Add("NAME  $file  -> $($rule.Reason)") ; break }
     }
 
     $ext = [System.IO.Path]::GetExtension($file).ToLowerInvariant()

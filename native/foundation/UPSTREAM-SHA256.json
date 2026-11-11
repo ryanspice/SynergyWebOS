@@ -1,0 +1,7 @@
+{
+  "src/runtime.cpp": "8983312b03946c13a98e24dba93fa73db70c8d9d9a8b6085dfeaea13d7b44101",
+  "src/render.cpp": "8dbfdaa9824fff8e1976cfc4680a00f812b8a70497da2eb4193aa025d905a923",
+  "src/core.cpp": "bfac5540acb1e7f157e763f4b394277cc7dd8de8d8aedd841c747fa2c9fb43b5",
+  "include/spice/json.hpp": "90173a218c2c3eb981382b9417234c67e90ee08d19d98d5a21ca203e5e6fb873",
+  "compat/native_abi.hpp": "5368b808c1b38ea8bb7855fa1329fa3c9ae7bffd2b20b85416752f472523c6c5"
+}

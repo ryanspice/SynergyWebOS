@@ -24,7 +24,7 @@
     <symbol id="i-check" viewBox="0 0 24 24"><path d="m4 12.5 5 5L20 6.5"/></symbol>
     <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3 2.5 20h19zM12 9v5M12 17.5v.5"/></symbol>
     <symbol id="i-keyboard" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M6 9h.01M10 9h.01M14 9h.01M18 9h.01M6 13h.01M10 13h.01M14 13h.01M18 13h.01M7 16.5h10"/></symbol>
-    <symbol id="i-dock" viewBox="0 0 24 24"><rect x="2.5" y="4" width="19" height="12" rx="2"/><path d="M8 20h8M12 16v4"/><path d="M6 12.5h3M11 12.5h3M16 12.5h2"/></symbol>
+    <symbol id="i-monitor" viewBox="0 0 24 24"><rect x="2.5" y="4" width="19" height="12" rx="2"/><path d="M8 20h8M12 16v4"/><path d="M6 12.5h3M11 12.5h3M16 12.5h2"/></symbol>
     <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/></symbol>
     <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></symbol>
     <symbol id="i-power" viewBox="0 0 24 24"><path d="M12 3v9M6.3 6.3a8 8 0 1 0 11.4 0"/></symbol>
@@ -87,7 +87,7 @@
             <strong id="rootState" class="is-muted">Not checked</strong>
           </div>
           <div class="rail-meta">
-            <span>SynergyWebOS <span id="versionLabel">0.3.2</span></span>
+            <span>SynergyWebOS <span id="versionLabel">0.3.4</span></span>
             <span>Synergy 1.x</span>
           </div>
         </div>
@@ -134,7 +134,7 @@
                 </div>
                 <div class="endpoint">
                   <span class="endpoint-icon tv" aria-hidden="true">
-                    <svg class="icon"><use href="#i-dock"/></svg>
+                    <svg class="icon"><use href="#i-monitor"/></svg>
                   </span>
                   <strong>TV</strong>
                   <small id="boardScreen">webos-tv</small>
@@ -376,22 +376,6 @@
             <p class="empty-note">No apps loaded yet.</p>
           </div>
 
-          <section id="dockSlot" class="dock-card" data-dock-slot="junction" aria-labelledby="dock-title">
-            <div class="dock-copy">
-              <p class="eyebrow">Companion</p>
-              <h2 id="dock-title">Dock</h2>
-              <p>A separate, autohiding app switcher for the TV. SynergyWebOS can launch it when installed; the built-in app grid always stays available.</p>
-              <p class="panel-note">A third-party app cannot guarantee an always-on overlay above other TV apps. The companion is a standalone surface.</p>
-            </div>
-            <div class="dock-actions">
-              <span class="dock-id">dev.canopy.tvdock</span>
-              <button type="button" class="btn btn-quiet" data-action="open-dock">
-                <svg class="icon" aria-hidden="true"><use href="#i-dock"/></svg>
-                Launch dock
-              </button>
-              <p id="dockMessage" class="panel-note" role="status" aria-live="polite"></p>
-            </div>
-          </section>
         </section>
 
         <!-- SETTINGS -->
@@ -514,17 +498,15 @@
               <p class="panel-note">Read desktop queries the server's read-only settings API. Applying a profile is a lead/desktop-helper step with physical acceptance; the parser alone cannot prove a true 2×2 region.</p>
             </section>
 
-            <section class="panel settings-panel" aria-labelledby="dock-settings-title">
+            <section class="panel settings-panel" aria-labelledby="shortcuts-title">
               <div class="panel-head">
                 <div>
                   <p class="eyebrow">App switching</p>
-                  <h2 id="dock-settings-title">Dock &amp; shortcuts</h2>
+                  <h2 id="shortcuts-title">Keyboard shortcuts</h2>
                 </div>
               </div>
               <dl class="facts compact-facts">
-                <div><dt>Dock app</dt><dd>dev.canopy.tvdock</dd></div>
                 <div><dt>Built-in switcher</dt><dd>Always available</dd></div>
-                <div><dt>Overlay</dt><dd>Not supported as a third-party surface</dd></div>
               </dl>
               <div class="shortcut-grid" aria-label="Keyboard shortcuts">
                 <span><kbd>1</kbd>…<kbd>4</kbd> sections</span>
@@ -535,7 +517,6 @@
                 <span><kbd>←↑↓→</kbd> app grid</span>
               </div>
               <div class="form-actions">
-                <button type="button" class="btn btn-quiet" data-action="open-dock">Launch dock</button>
                 <button type="button" class="btn btn-ghost" data-go="apps">Open app grid</button>
               </div>
             </section>
@@ -548,7 +529,7 @@
                 </div>
               </div>
               <dl class="facts compact-facts">
-                <div><dt>Version</dt><dd id="aboutVersion">0.3.2</dd></div>
+                <div><dt>Version</dt><dd id="aboutVersion">0.3.4</dd></div>
                 <div><dt>Author</dt><dd>Ryan Spice-Finnie</dd></div>
                 <div><dt>App ID</dt><dd class="mono">dev.canopy.synergywebos</dd></div>
                 <div><dt>Runtime</dt><dd>Static web app · no Node.js</dd></div>
@@ -563,7 +544,7 @@
         </section>
 
         <footer class="main-foot">
-          <span>SynergyWebOS <span class="version-inline">0.3.2</span> by Ryan Spice-Finnie · independent Synergy-compatible client</span>
+          <span>SynergyWebOS <span class="version-inline">0.3.4</span> by Ryan Spice-Finnie · independent Synergy-compatible client</span>
           <span>Trusted LAN only · no cloud · no Node.js runtime</span>
         </footer>
       </main>

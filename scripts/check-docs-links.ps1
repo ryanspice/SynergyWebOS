@@ -22,11 +22,11 @@
 .PARAMETER Path
     Checker root. Defaults to the parent of this script's folder.
 .PARAMETER AllowMissing
-    Comma-separated repository-relative prefixes (e.g. 'app', 'dock') whose
+    Comma-separated repository-relative prefixes (e.g. 'app', 'tools') whose
     targets may be missing but are only warned about, for folders owned by
     workstreams that have not landed yet. Pass as a comma-separated string so
     it works through Windows PowerShell 5.1 and 7:
-      -AllowMissing 'app,dock,scripts'
+      -AllowMissing 'app,tools,scripts'
     Defaults to empty for a complete repository.
 .PARAMETER GitWorkTree
     Optional git checkout to list Markdown files from. Paths are read from that

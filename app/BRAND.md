@@ -1,8 +1,13 @@
+> **Historical 0.3.4 web app.** This document describes the retired web UI and
+> its Apps/switcher surface. The native 0.4.0 candidate is documented in the
+> root `README.md` and `native/docs/`; the dock is removed (D-011).
+
 # SynergyWebOS — brand and migration
 
-**Status:** adopted for the `0.3.2` build by **Ryan Spice-Finnie**. The package
-ID stays `dev.canopy.synergywebos` for in-place upgrade; the display name and
-vendor change.
+**Status:** adopted for the `0.3.4` legacy web build by **Ryan Spice-Finnie**.
+The package ID is `dev.canopy.synergywebos`; a TV that still has the earlier
+`dev.hurrspice.synergywebos` install may list both (see `docs/decisions.md`
+D-012).
 
 ## 1. Name
 

@@ -26,13 +26,25 @@ components. Nothing proprietary is bundled in this repository.
 - "LG" and "webOS" are trademarks of LG Electronics. This project is not
   affiliated with or endorsed by LG Electronics.
 
-## Runtime dependencies of the app
+## Runtime dependencies of the native app
 
-The TV app runs in the TV's built-in Chromium engine. Any JavaScript library
-that ends up in the built package must be recorded here with its license and
-version when the build pipeline adds it. Until then this section is the
-authoritative list of expected third-party code: **none** beyond the webOS
-runtime itself.
+The native 0.4.0 app is C++20 and links the TV runtime's libraries; they are not
+vendored or relicensed here:
+
+- **SDL2** — zlib license (window, input and events).
+- **FreeType** — FreeType Project License (FTL) / GPLv2 (text rendering).
+- **json-c** — MIT license (configuration and IPC JSON).
+- **libpng** — libpng License (icon/PNG loading).
+- The GLES2 renderer uses the TV's own driver.
+
+The adapted Spice Home C++ foundation is MIT-licensed; its notice is retained in
+`native/foundation/LICENSE` (installed as `FOUNDATION-LICENSE`). Provenance and
+the original source hashes are recorded in `native/NOTICE.md`. No fonts or
+third-party runtime libraries are bundled in this source handoff.
+
+The retained 0.3.4 web app (`app/`) ran in the TV's Chromium engine. It is
+migration source, not the native runtime; any JavaScript library added to that
+legacy package must be recorded here.
 
 ## Dev/build dependencies
 

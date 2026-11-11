@@ -1553,52 +1553,12 @@ body.is-live .path-corner i {
   box-shadow: 0 0 0 3px rgba(255, 179, 92, 0.12);
 }
 
-.dock-card {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 40px;
-  margin: 26px 0 12px;
-  padding: 26px 28px;
-  border: 1px solid var(--line);
-  border-radius: 20px;
-  background:
-    radial-gradient(520px 200px at 8% 0%, rgba(255, 179, 92, 0.08), transparent 70%),
-    var(--panel);
-}
 
-.dock-copy {
-  max-width: 780px;
-}
 
-.dock-copy h2 {
-  margin: 5px 0 8px;
-}
 
-.dock-copy p:not(.eyebrow) {
-  color: var(--muted);
-  font-size: 15px;
-  line-height: 1.55;
-}
 
-.dock-actions {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 8px;
-  min-width: 240px;
-}
 
-.dock-id {
-  color: var(--muted-2);
-  font-family: var(--mono);
-  font-size: 11px;
-}
 
-.dock-actions .panel-note {
-  margin-top: 2px;
-  text-align: right;
-}
 
 /* ---------- settings ---------- */
 
@@ -2135,16 +2095,6 @@ body.is-live .path-corner i {
   .view-head {
     align-items: flex-start;
     flex-direction: column;
-  }
-  .dock-card {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-  .dock-actions {
-    align-items: flex-start;
-  }
-  .dock-actions .panel-note {
-    text-align: left;
   }
   .main-foot {
     align-items: flex-start;

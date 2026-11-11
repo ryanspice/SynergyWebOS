@@ -1,3 +1,5 @@
+> **Legacy 0.3.4 reference.** The native 0.4.0 candidate is documented in the root README and `native/docs/`. Dock references below describe a retired component; no dock is included. Historical TV results do not validate the native rebuild.
+
 # SynergyWebOS app — current delivery report
 
 **Owner:** app workstream (lead accepts)

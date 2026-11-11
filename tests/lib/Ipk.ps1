@@ -63,7 +63,9 @@ function Expand-TgzToMap {
                 $size = if ($sizeField) { [Convert]::ToInt64($sizeField, 8) } else { 0 }
                 $type = [char]$header[156]
                 $prefix = [System.Text.Encoding]::ASCII.GetString($header, 345, 155).Trim([char]0)
-                $full = if ($prefix) { $prefix + '/' + $name } else { $name }
+                # Some packagers write non-path bytes into the ustar prefix field; only join a
+                # clean relative path, otherwise fall back to the 100-byte name field.
+                $full = if ($prefix -match '^[A-Za-z0-9._/-]+$') { $prefix + '/' + $name } else { $name }
                 $full = $full.TrimStart('./')
                 $body = New-Object byte[] $size
                 $got = 0

@@ -13,11 +13,16 @@
 - Workflow syntax: `npx --yes yaml-lint .github/workflows/ci.yml .github/dependabot.yml` (optional).
 
 ## Build-level checks
-- Package validation (`ares-package`), plus static contract checks for the client path, root ACG declaration and absence of a third-party launcher.
-- Home-target contract: Windows/Super/Meta keys map to system Home; repeats/releases consumed.
-- Alt-hold contract: five-second continuous Alt launches Home, releases injected modifier, cancels on release/pointer exit/disconnect/stop.
-- Config tooling: dry-run/validation against a temporary Synergy core on a free port; no live server changes.
-- Dock: catalog injection contract, open-app sorting, local browser check at 1920x1080.
+- Native host: CMake + Ninja + CTest per `native/docs/BUILD.md`, including the
+  core, integration and UI suites; ASan/UBSan in a separate build directory.
+- Source bundle: `python native/tests/bundle_tests.py` (set `PYTHONUTF8=1` on
+  Windows); gear-spike fixtures under `spikes/gear-settings/`.
+- Legacy 0.3.4 web app (migration source only): `pwsh ./scripts/build/build.ps1`
+  and `pwsh ./tests/lib/Run-Tests.ps1`. Do not label its IPK a native build.
+- Target: ARM32 cross-build, `native/scripts/audit-stage.py`, then
+  `ares-package`; unexecuted until the verified SDK is supplied.
+- TV acceptance: install, UID/jail socket reachability, uinput, dry run, real
+  input, Home/Alt+Tab, sleep/wake and rollback; record as manual evidence.
 
 ## Manual TV/PC acceptance
 See `docs/testing.md` for the full manual acceptance checklist. These cannot run in CI. Record result (date, versions, TV model, webOS version, commit) in release notes. Do not commit device evidence.

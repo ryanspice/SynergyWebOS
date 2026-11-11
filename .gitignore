@@ -37,11 +37,10 @@ pnpm-debug.log*
 # ---------------------------------------------------------------------------
 dist/
 !dist/release/
-# Build output directories: root `/build`, `app/build/` and `dock/build/`.
+# Build output directories: root `/build`, `app/build/` and `native/build/`.
 # `scripts/build/` (the pipeline source) is deliberately NOT ignored.
 /build/
 /app/build/
-/dock/build/
 out/
 coverage/
 *.ipk
@@ -185,7 +184,6 @@ Synergy-*.bin
 *.webp
 *.bmp
 !app/**/*.png
-!dock/**/*.png
 !config/icons/*.png
 screenshots-local/
 captures/
@@ -198,3 +196,20 @@ logs/
 synergy-webos.log
 synergy-webos-state.json
 *.pid
+
+# Native development outputs; preview binaries remain handoff-only.
+native/build/
+native/dist/
+native/bin/
+
+# Native app assets are authored inputs, not private captures.
+!native/icon.png
+!native/icon-large.png
+native/verification/
+
+# Reviewed public native README assets; raw probe evidence stays private.
+!docs/media/*.png
+!docs/media/badges/*.svg
+.ai/
+__pycache__/
+*.pyc

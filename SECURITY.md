@@ -2,9 +2,10 @@
 
 ## Scope
 
-This repository contains a TV app, a dock/app-switcher prototype and
-configuration tooling for a **rooted LG webOS TV** talking to a **Synergy 3**
-server on a trusted LAN. Relevant threats include:
+This repository contains a native TV app (`native/`), a retained 0.3.4 web app
+(`app/`, migration source only) and configuration tooling for a **rooted LG
+webOS TV** talking to a **Synergy 3** server on a trusted LAN. Relevant threats
+include:
 
 - Leaked device credentials: the TV is reached over adb/SSH to a rooted device,
   and the PC holds per-device access material (for example webOS CLI keys

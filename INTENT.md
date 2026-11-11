@@ -1,12 +1,21 @@
 # Intent
 
-SynergyWebOS is a TV-first Synergy experience for LG webOS televisions: a TV app plus a companion dock/app switcher that brings the desktop keyboard and mouse to the TV through a small, configurable handoff corner.
+SynergyWebOS is a native, TV-first Synergy client for LG webOS televisions: a
+C++20 SDL2/GLES2 app that brings a desktop keyboard and mouse to the TV over the
+classic Synergy 1.4 protocol, with explicit local root provisioning.
 
 Goals:
-- Remove any third-party launcher (Orbis Home) from the home path and dock host. The Windows key returns to the TV's real system home screen.
-- A separate dock/app switcher, not inside a third-party app.
-- A tiny top-left handoff (2x2 px) with configurable switch delay/override.
-- Rebrand and redesign the TV app: modern, lean, 1080p, keyboard/mouse-first.
-- Clean, policy-compliant repository ready for GitHub, with reproducible builds and documented acceptance.
+- Native **Connection / Input / Handoff / Diagnostics** UI; no browser, Python or
+  Node runtime on the TV.
+- Keyboard, pointer, Home and Alt+Tab handling from a separate input daemon that
+  can outlive the UI.
+- No dock, Apps page or generic launcher RPC (owner decision D-011). Home and
+  Alt+Tab are protocol-driven input shortcuts, not launcher APIs.
+- A tiny PC-side handoff corner with a configurable delay; the TV app stores a
+  local handoff reference and never edits the Windows Synergy server.
+- Keep the 0.3.4 web app as migration and rollback source, not the native runtime.
+- Reproducible host build and honest, separate ARM/TV verification.
 
-Non-goals for this repository: no Synergy binaries, no webOS SDK, no device credentials, no push/remote creation without explicit authorization.
+Non-goals: no Synergy binaries, webOS SDK, device credentials, TLS, clipboard,
+cloud discovery, absolute cursor synchronization, or push/publication without
+explicit authorization.

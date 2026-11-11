@@ -46,7 +46,7 @@
       'connectionForm', 'formMessage', 'startBtn', 'logMeta', 'logFollow', 'logView',
       'factRoot', 'factPython', 'factUinput', 'factAddress', 'probeNote',
       'autostartBadge', 'autostartNote', 'appSearch', 'appsStatus', 'appGrid',
-      'dockMessage', 'saveState', 'homeDelay', 'homeDelayOut', 'homeNote',
+      'saveState', 'homeDelay', 'homeDelayOut', 'homeNote',
       'cornerEnabled', 'cornerOverride', 'switchDelay', 'switchDelayOut',
       'serverState', 'serverDelay', 'serverOverride', 'profilePreview',
       'aboutVersion', 'resetBtn', 'resetNote', 'toast', 'keyflowTarget', 'keyflowSub'
@@ -867,17 +867,6 @@
     });
   }
 
-  function launchDock() {
-    if (els.dockMessage) els.dockMessage.textContent = 'Requesting the dock…';
-    J.openDock().then(function () {
-      if (els.dockMessage) els.dockMessage.textContent = 'Dock launch requested. If it does not appear, install the companion package.';
-      toast('Dock launch requested.', 'good');
-    }).catch(function (error) {
-      if (els.dockMessage) els.dockMessage.textContent = 'Dock unavailable: ' + messageOf(error) + '. The built-in app grid still works.';
-      toast('Dock unavailable: ' + messageOf(error), 'error');
-    });
-  }
-
   /* ---------- navigation ---------- */
 
   var VIEWS = { home: true, link: true, apps: true, settings: true };
@@ -986,8 +975,7 @@
         readServer();
       } else if (action === 'refresh-apps') {
         loadApps();
-      } else if (action === 'open-dock') {
-        launchDock();
+
       } else if (action === 'reset-settings') {
         resetLocalSettings();
       }

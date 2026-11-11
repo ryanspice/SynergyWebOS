@@ -1,3 +1,18 @@
+# Native 0.4.0 candidate entry point
+
+The owner explicitly requested the C++ homescreen/SkiFree foundation. Work on
+`native/` for this rebuild. Read its docs/VERIFICATION.md and .thoughts/HANDOFF.md
+first. Do not run the legacy root packaging path and label it a native build.
+Preserve the existing app ID, retained migration source, real toolchain gates, and dirty local
+work. No deployment/publication/root changes have been performed or pre-approved.
+
+The dock is removed. Do not restore its package, UI, catalog writing or generic
+launcher RPCs. The gear-menu request is a bounded read-only spike under
+`spikes/gear-settings/`, not authority to patch the TV. README screenshot/badge
+claims must match the recorded host-only evidence.
+
+---
+
 # SynergyWebOS agent entry point
 
 Working contract: one accountable owner per task; scoped approvals (stage/commit/push/credentials/publication need separate scope); discovery grants no authority; smallest-sufficient checks; preserve first failures; preserve unrelated dirty/untracked work.

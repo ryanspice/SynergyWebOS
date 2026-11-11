@@ -1,5 +1,5 @@
 # Unit tests for scripts/build/lib/Checks.ps1 and the pipeline contract.
-# These are fixture-based and require no app/, dock/, or network. They double as
+# These are fixture-based and require no app/ or network. They double as
 # sensitivity proofs: every fixture below is a known-bad input the check must catch.
 $null = [System.Environment]::SetEnvironmentVariable('NO_COLOR', '1')
 
@@ -105,7 +105,7 @@ $map['no-orbis: clean fixture passes'] = {
 $map['no-orbis: reference in a nested file is caught'] = {
     $dir = New-FixtureApp -Path (Join-Path $orbis 'dirty')
     New-Item -ItemType Directory -Path (Join-Path $dir 'src') -Force | Out-Null
-    [System.IO.File]::WriteAllText((Join-Path $dir 'src\dock.js'), '// launch the Orbis Home app`n')
+    [System.IO.File]::WriteAllText((Join-Path $dir 'src\fixture.js'), '// launch the Orbis Home app`n')
     (Get-IssueIds (Test-NoOrbisReferences -ScanRoots @($dir))) -contains 'orbis.reference' | ForEach-Object { Assert-True $_ }
 }
 

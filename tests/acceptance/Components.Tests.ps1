@@ -1,65 +1,13 @@
-# Acceptance checks across component boundaries: dock (Terra 2), home patch (Terra 3),
-# hot-corner tooling (Terra 1), and the app<->dock integration contract.
-# Read-only against those scopes; failures are reported, never "fixed" here.
+# Cross-component acceptance: dock absence, Home shortcuts and desktop handoff.
 $root = Get-RepoRoot
 $map = [ordered]@{}
-
-$dock = Get-DockArtifacts
 $homeArt = Get-HomeArtifacts
 
-# --------------------------------------------------------------------------
-# Dock
-# --------------------------------------------------------------------------
-$map['dock: present with appinfo, entry HTML and catalog/launch integration'] = {
-    if (-not $dock.Exists) { Block-Test 'dock/ missing (Terra 2 not ready)' }
-    Assert-True ($dock.Html.Count -gt 0) 'index.html present'
-    if (-not $dock.Appinfo) { throw 'dock/appinfo.json missing' }
-    Assert-NoIssues (Test-Appinfo -AppDir $dock.DockDir) | Out-Null
-    $js = Get-TextFileContent -Path (Join-Path $dock.DockDir 'dock.js')
-    foreach ($svc in 'listLaunchPoints', 'listApps', 'getForegroundAppInfo') {
-        Assert-Match $js $svc "dock queries $svc"
+$map['bundle: standalone dock is absent and cannot be launched from the app'] = {
+    Assert-False (Test-Path -LiteralPath (Join-Path $root 'dock')) 'no standalone dock directory'
+    foreach ($path in 'app/js/core.js', 'app/js/app.js', 'app/index.html') {
+        Assert-NotMatch (Get-TextFileContent (Join-Path $root $path)) '(?i)dev\.canopy\.tvdock|openDock|prepareDockCatalog|launchDock|open-dock|dockSlot' 'no removed companion integration'
     }
-    Assert-Match $js 'launch' 'dock launches apps'
-}
-$map['dock: static HTML/JS/CSS valid and TV-static compatible'] = {
-    if (-not $dock.Exists) { Block-Test 'dock/ missing' }
-    foreach ($h in $dock.Html) { Assert-NoIssues (Test-HtmlStatic -HtmlPath $h -CheckRefs) | Out-Null }
-    foreach ($c in @(Get-ScannedFiles -Root $dock.DockDir -Include '*.css')) { Assert-NoIssues (Test-CssBalance -CssPath $c.FullName) | Out-Null }
-    $issues = @(Test-JsSyntax -Files $dock.Scripts)
-    Assert-NoIssues $issues | Out-Null
-    $tv = @(Test-TvStaticCompat -AppDir $dock.DockDir -TargetChromium 87)
-    Assert-NoIssues $tv | Out-Null
-    'dock static ok'
-}
-$map['dock: it is separate from the app (own package id, not the TV app id)'] = {
-    if (-not $dock.Appinfo) { Block-Test 'dock/appinfo.json missing' }
-    $dockId = (Get-Content -LiteralPath $dock.Appinfo -Raw | ConvertFrom-Json).id
-    $appInfoPath = Join-Path $root 'app\appinfo.json'
-    if (Test-Path -LiteralPath $appInfoPath) {
-        $appId = (Get-Content -LiteralPath $appInfoPath -Raw | ConvertFrom-Json).id
-        Assert-True ($dockId -ne $appId) ("dock id $dockId must differ from the TV app id $appId (separate app)")
-    }
-    $appJs = Join-Path $root 'app\js\core.js'
-    if (Test-Path -LiteralPath $appJs) {
-        $core = Get-TextFileContent -Path $appJs
-        Assert-Match $core ("dockAppId:\s*'" + [regex]::Escape($dockId) + "'") ("app/js/core.js dockAppId must equal dock package id '$dockId'")
-    }
-    $dockId
-}
-$map['dock: overlay limitation and lead gates documented (no false overlay claim)'] = {
-    if (-not $dock.Exists) { Block-Test 'dock/ missing' }
-    $docs = @($dock.Docs | ForEach-Object { Get-TextFileContent $_.FullName }) -join "`n"
-    Assert-Match $docs '(?i)overlay' 'overlay architecture limitation documented'
-    Assert-Match $docs '(?i)autohide' 'autohide behaviour documented'
-    Assert-Match $docs '(?i)Lead acceptance gates|acceptance' 'lead acceptance gates documented'
-    'documented'
-}
-$map['dock: keyboard/mouse-first controls documented'] = {
-    if (-not $dock.Exists) { Block-Test 'dock/ missing' }
-    $docs = @($dock.Docs | ForEach-Object { Get-TextFileContent $_.FullName }) -join "`n"
-    Assert-Match $docs '(?i)\b(Tab|Escape|Enter|keyboard)\b' 'keyboard interaction documented'
-    Assert-Match $docs '(?i)pointer|mouse' 'pointer interaction documented'
-    'documented'
 }
 
 # --------------------------------------------------------------------------

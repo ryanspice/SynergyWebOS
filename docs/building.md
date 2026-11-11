@@ -1,3 +1,5 @@
+> **Historical 0.3.4 documentation.** For the native 0.4.0 candidate, start at [the current README](../README.md) and [native verification](../native/docs/VERIFICATION.md). Dock references are historical; the dock has been removed from this bundle. Do not use legacy web-packaging instructions to produce a native release.
+
 # Building and packaging
 
 Status: **[pending]** — the build pipeline is owned by the build workstream

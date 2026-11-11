@@ -1,3 +1,5 @@
+> **Historical 0.3.4 documentation.** For the native 0.4.0 candidate, start at [the current README](../README.md) and [native verification](../native/docs/VERIFICATION.md). Dock references are historical; the dock has been removed from this bundle. Do not use legacy web-packaging instructions to produce a native release.
+
 # Decisions and recorded exceptions
 
 Newest first. Each entry: id, date, decision, owner, review condition.
@@ -83,8 +85,9 @@ Newest first. Each entry: id, date, decision, owner, review condition.
 
 - **Date:** 2026-10-31
 - **Context:** the previously installed prototype used the app ID
-  `dev.canopy.synergywebos`; changing it means the TV treats the new app as
-  a fresh install.
+  `dev.hurrspice.synergywebos`; the source was later renamed to
+  `dev.canopy.synergywebos` (commit `8779298`). Changing the ID means the TV
+  treats the new package as a fresh install.
 - **Decision:** app ID ownership belongs to `app/BRAND.md`. The repository
   workstream records only that the app ID must match `appinfo.json`, icons and
   the client install paths; a rename requires an uninstall/migration note in the
@@ -137,4 +140,37 @@ Newest first. Each entry: id, date, decision, owner, review condition.
   and `THIRD_PARTY_NOTICES.md` together).
 - **Owner:** lead.
 - **Review:** at repository creation.
+
+## D-011 — Dock retirement in the native 0.4.0 rebuild
+
+- **Date:** 2026-11-11
+- **Context:** the native 0.4.0 rebuild carries a native
+  Connection/Input/Handoff/Diagnostics UI. The owner removed the standalone
+  dock, the native Apps page, the companion launch/catalog-write wiring and the
+  generic launcher RPCs (`apps`, `launch`, `home`). Dock references in the
+  retained 0.3.4 web app and its docs are historical only.
+- **Decision:** the tracked `dock/` directory is removed from the repository;
+  `docs/dock-review.md` is archived to `.ai/archive/dock-review-20261111.md`
+  and removed from `docs/`. The dock must not be restored, and Home/Alt+Tab
+  remain protocol-driven input shortcuts, not launcher APIs or UI.
+- **Owner:** owner (native 0.4.0 handoff); lead reviews at integration.
+- **Review:** before any release; reject changes that reintroduce `dock/`,
+  dock wiring, the Apps page or the removed launcher RPCs.
+
+## D-012 — Native 0.4.0 identity, legacy coexistence and first-boot migration
+
+- **Date:** 2026-11-11
+- **Context:** the pre-rename 0.3.4 web package was
+  `dev.hurrspice.synergywebos`; the source was renamed to
+  `dev.canopy.synergywebos` in commit `8779298`, and the native 0.4.0 candidate
+  keeps that ID. On a TV that still has the hurrspice install, 0.4.0 installs as
+  a **second app**, not an in-place upgrade. D-007's earlier wording implied the
+  old ID was already canopy; that history is corrected there.
+- **Decision:** 0.4.0 ships as `dev.canopy.synergywebos`. Release notes must
+  state the possible hurrspice coexistence, require stopping/disabling the old
+  client and its autostart before the first native boot, and give an explicit
+  uninstall/rollback path. Never run two input daemons. Legacy settings are not
+  imported automatically.
+- **Owner:** lead/owner. **Review:** before the first native TV install and in
+  the release notes.
 

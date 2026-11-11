@@ -1,5 +1,5 @@
 {
-  "$comment": "Build/package manifest for the synergy-tv TV app (owner: Flash-off 2). These are build-owned inputs; they never override app/ source (see scripts/build/README.md). Every non-app override is appended to dist/build-info.json so the artifact is reproducible and auditable.",
+  "$comment": "LEGACY WEB 0.3.4 ONLY: build/package manifest for the synergy-tv TV app (owner: Flash-off 2). These are build-owned inputs; they never override app/ source (see scripts/build/README.md). Every non-app override is appended to dist/build-info.json so the artifact is reproducible and auditable.",
   "appDir": "app",
   "appinfo": "app/appinfo.json",
   "artifactName": "synergy-tv-app",

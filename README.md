@@ -1,118 +1,162 @@
-# Synergy for WebOS
+# SynergyWebOS
 
-[![Version: 0.3.4](https://img.shields.io/badge/version-0.3.4-b88a3b)](docs/release.md) [![Platform: LG webOS TV](https://img.shields.io/badge/platform-LG_webOS_TV-a50034)](docs/building.md) [![Target: web (all)](https://img.shields.io/badge/target-all_web-555555)](TESTING.md) [![TV evidence: LG C3](https://img.shields.io/badge/TV_evidence-LG_C3-6b8e23)](app/REPORT.md) [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE) [![App ID: dev.canopy.synergywebos](https://img.shields.io/badge/app_id-dev.canopy.synergywebos-lightgrey)](app/BRAND.md)
+![Candidate version 0.4.0](docs/media/badges/version.svg)
+![C++20](docs/media/badges/cpp.svg)
+![SDL2 and GLES2](docs/media/badges/runtime.svg)
+[![MIT license](docs/media/badges/license.svg)](LICENSE)
+[![Host verified; TV pending](docs/media/badges/verification.svg)](native/docs/VERIFICATION.md)
 
-**SynergyWebOS** (*"Your desk, on the TV."*) is a TV-first Synergy experience for LG
-webOS televisions: a TV app plus a companion dock/app switcher that brings your
-desktop keyboard and mouse to the TV through a small, configurable handoff
-corner.
+**One desktop keyboard and mouse. Native control on your webOS TV.**
 
-- Brand, visual identity, app ID and migration notes:
-  [`app/BRAND.md`](app/BRAND.md).
-- The repository name `synergy-tv` is retained; the package ID remains the
-  existing one for upgrade compatibility.
+![Native SynergyWebOS connection screen](docs/media/native-connection.png)
 
-**Status:** working local build — SynergyWebOS `0.3.4` is packaged, installed and exercised on the owner's LG C3 (Chromium 87 floor, tested on Chromium 132 / webOS 26). Physical acceptance recorded in [`app/REPORT.md`](app/REPORT.md) and [`docs/testing.md`](docs/testing.md). No remote/push is configured. See [`docs/bridging-map.md`](docs/bridging-map.md) for a comparison with a native C++20 port.
+*Actual SDL2/GLES2 framebuffer capture from the Linux host build, with the local
+control daemon idle. Not a browser mockup, LG TV photo, or proof of TV compatibility.*
 
-## What it is meant to be
+**0.4.0 native candidate — implemented and host-tested; ARM build and TV validation pending.**
 
-- **TV app** — a lean, 1080p, keyboard/mouse-first webOS app that shows the
-  Synergy client connection, live log, root/uinput probe, autostart state,
-  home-key target and handoff settings. See [`app/`](app/) and
-  [`app/BRAND.md`](app/BRAND.md).
-- **TV dock / app switcher** — an autohide taskbar for switching between open
-  TV apps. SynergyWebOS supplies the live catalog (open apps first); the standalone
-  dock is intentionally unprivileged. See [`dock/`](dock/).
-- **Handoff configuration tooling** — a small, configurable hot corner that
-  hands control to the TV, plus Synergy 3 server/config/API helpers. See
-  [`tools/synergy/`](tools/synergy/).
-- **Home-key and escape handling** — the Windows key returns to the TV's own
-  system home screen; holding either Alt key for five seconds does the same.
-  See [`scripts/home/`](scripts/home/).
-- **Build and test pipeline** — reproducible webOS package build and the
-  acceptance checks. See [`scripts/build/`](scripts/build/) and
-  [`tests/`](tests/).
+This rebuild starts from the supplied `synergy-tv-0.3.4.tar`, and adds the native
+foundation used by Spice Home C++ and SkiFreeWebOS: **C++20, CMake/Ninja, SDL2
+window/input handling, raw GLES2 rendering, FreeType text, and ARM32 cross-build
+gates**. It is not an HTML app packaged behind a native launcher.
 
-## Layout
+The native runtime contains no Python, Node, browser or Electron component.
+Python is used only by host-side tests/audits. The legacy Python/web app is
+retained in this source handoff for migration reference, not loaded by the new native app. The dock source,
+companion-launch integration and native Apps page have been removed. Keep the
+original 0.3.4 archive/package separately for exact rollback.
 
-| Path | Purpose | Owner |
-| --- | --- | --- |
-| `app/` | Branded TV app (UI, client scripts, `appinfo.json`, `BRAND.md`) | app owner |
-| `dock/` | Standalone dock/app-switcher prototype and integration contract | dock owner |
-| `tools/synergy/` | Synergy 3 server/UI/handoff config tooling | config owner |
-| `scripts/home/` | Windows-key → system home patch and cleanup scripts | home owner |
-| `scripts/build/` | Build/package pipeline | build owner |
-| `tests/` | Automated checks and acceptance scripts | build owner |
-| `docs/` | Repository, lifecycle, handoff and release notes | repo owner |
-| `.github/` | CI workflows, issue/PR templates | repo owner |
-| `BRIEF.md` | Internal working brief for the rebuild | lead |
+## Entry points
 
-All workstream directories are populated. `BRIEF.md` is an internal working
-brief and is intentionally untracked; it is not part of the public package.
+| Path | Purpose |
+|---|---|
+| `native/src/ui.cpp` | Native Connection, Input, Handoff and Diagnostics UI |
+| `native/src/daemon.cpp` | Separate local control daemon; input can outlive the UI |
+| `native/src/protocol.cpp` | Bounded, incremental classic Synergy protocol client |
+| `native/src/input.cpp` | Linux uinput backend and non-injecting dry run |
+| `native/src/platform.cpp` | Bounded, typed Home/app-switch operations |
+| `native/src/ipc.cpp` | UID-checked Unix-domain control socket; no TCP control listener |
+| `native/scripts/Build-Desktop.ps1` | PowerShell → WSL native build and tests |
+| `native/scripts/build-webos.sh` | Guarded real ARM32 cross-build/stage |
+| `native/docs/BUILD.md` | Host, target, packaging and first-TV-test instructions |
+| `native/docs/VERIFICATION.md` | What actually ran, and what did not |
+| `native/docs/PARITY.md` | 0.3.4 behavior carried forward and deliberate limits |
+| `native/docs/SECURITY.md` | Root provisioning and shared-UID trust boundary |
+| `spikes/gear-settings/` | LG gear-menu research, read-only SSH probe, and acceptance/rollback plan |
+| `.thoughts/HANDOFF.md` | Bounded continuation for the existing local webOS workspace |
 
-## Requirements
+App identity remains `dev.canopy.synergywebos`. Native candidate version is
+`0.4.0`. The retained legacy source/scripts keep their original 0.3.4 identity (with dock
+wiring removed); do
+not package the old `app/` directory and label that output a native 0.4.0 build.
+The former README is at `docs/legacy/README-0.3.4.md`.
 
-- Windows 10/11 with PowerShell 7.5+ for the tooling and scripts.
-- Git 2.40+.
-- For building the webOS package: Node.js 20+ and the
-  [webOS CLI](https://www.npmjs.com/package/@webos-tools/cli) (`3.2.6` validated;
-  pin whatever `scripts/build/` declares). See [`docs/building.md`](docs/building.md).
-- A rooted LG webOS TV running an up-to-date Homebrew Channel to deploy and
-  use the client. Root is required for the virtual input device; see
-  [`docs/security-model.md`](docs/security-model.md).
+## Native settings
 
-## Quick start (development)
+![Native keyboard and mouse input settings](docs/media/native-input.png)
+
+*Input settings: screen geometry, Home-key behavior, app-switch shortcut,
+experimental cursor nudge, and explicit plaintext consent. Capture is from the
+host build; the host build cannot inject real input.*
+
+![Native handoff configuration](docs/media/native-handoff.png)
+
+*Handoff is a saved local reference. It does not silently modify your Windows
+Synergy server or make a client-side hot corner real.*
+
+The dock and standalone app-switcher are **not included**. Windows-key Home and
+Alt+Tab remain keyboard shortcuts in the input daemon, not a launcher UI.
+
+## LG gear-button settings spike
+
+The research targets a real **Keyboard & mouse sharing** entry inside LG's own
+Quick Settings / All Settings, opening this native app. No supported public
+menu-registration API was found in the reviewed LG TV docs. A rooted,
+firmware-specific adapter is only a candidate until the C3's actual menu
+implementation is inspected. Nothing in this bundle patches or replaces the
+gear button, edits LG settings, or installs a system-menu row.
+
+[Read the findings, source references, read-only PowerShell probe and rollback gates](spikes/gear-settings/README.md).
+The collector uses existing SSH authorization and writes evidence only on the
+PC. It must be run on the target before choosing an insertion strategy.
+
+## Build from PowerShell
+
+Extract to a fresh folder; do not overwrite a dirty working repository:
 
 ```powershell
-git clone <your-fork-or-remote-url> synergy-tv
-cd synergy-tv
+Set-Location 'B:\Temp\@Browser'
+tar -xzf .\synergy-tv-native-0.4.0.tar.gz
+Set-Location .\synergy-tv-native-0.4.0
 
-# Install the optional local pre-commit guard once per clone
-git config core.hooksPath .githooks
+# Once, in the WSL distribution used for development:
+wsl -- sudo apt-get update
+wsl -- sudo apt-get install -y build-essential cmake ninja-build python3 pkg-config libsdl2-dev libfreetype6-dev libjson-c-dev libpng-dev
 
-# Show what a build would do without creating artifacts
-pwsh ./scripts/build/build.ps1 -DryRun
+.\native\scripts\Build-Desktop.ps1
 ```
 
-The build and test entry points are `scripts/build/build.ps1` and
-`tests/lib/Run-Tests.ps1`; see [`docs/building.md`](docs/building.md) for the
-deploy and acceptance sequence.
+Run the daemon in one WSL terminal and the UI in another. From the extracted
+project directory inside WSL:
 
-## Repository hygiene
+```bash
+./native/build/desktop/synergy-daemon
+./native/build/desktop/synergy-tv
+```
 
-The repository deliberately holds **no** secrets, license keys, backups, device
-credentials, proprietary Synergy binaries or customer/personal data. The rules
-are described in [`docs/repo-policy.md`](docs/repo-policy.md) and enforced by
-[`.gitignore`](.gitignore) plus the optional [`.githooks/`](.githooks/) guard.
-Keep changes small and stage explicit paths; do not use `git add -A` in this
-repository.
+Desktop builds **cannot enable real input**, even when run as root. They can
+connect to a real desktop Synergy server in dry-run mode. An empty server is
+intentional: set your numeric LAN address and matching screen name in the UI.
 
-## Documentation
+Optional compiled Linux x86_64 preview binaries are in `native/bin/linux-x86_64/`.
+They require compatible system SDL2, FreeType, json-c, PNG and C++ runtimes.
+They are not Windows executables, ARM TV binaries, or standalone installations.
+Building locally is the reproducible path.
 
-- [`docs/README.md`](docs/README.md) — documentation index.
-- [`docs/architecture.md`](docs/architecture.md) — how the pieces fit together.
-- [`docs/building.md`](docs/building.md) — build and packaging.
-- [`docs/testing.md`](docs/testing.md) — how changes are verified.
-- [`docs/security-model.md`](docs/security-model.md) — trust boundaries and
-  threat model.
-- [`docs/repo-policy.md`](docs/repo-policy.md) — ignore/lifecycle/cleanup rules.
-- [`docs/github-setup.md`](docs/github-setup.md) — remaining GitHub steps.
-- [`docs/lifecycle.md`](docs/lifecycle.md) — artifact lifecycle receipts.
+## Before touching the TV
 
-## Contributing and security
+Use the same verified ARM32 SDK/runtime inputs as the working homescreen/SkiFree
+build. The cross-build script rejects host output. The package stage must be
+reviewed against the TV's actual libraries and jail permissions.
 
-See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the contribution workflow and
-[`SECURITY.md`](SECURITY.md) for how to report a vulnerability privately.
+The native UI does **not** obtain root just by being native. This build's real
+input daemon requires an existing authorized root environment, usable uinput,
+and explicit local provisioning. Its Unix socket must also be reachable from
+the native app jail. That last integration has not been established on a TV.
+Do not broaden permissions or disable isolation to make a failed probe green.
 
-## License
+The existing Python daemon/autostart must be stopped explicitly before native
+real input. The new installer/provisioner does not kill it, overwrite its
+configuration, install a root exploit, or replace legacy boot hooks.
 
-[MIT](LICENSE). Third-party components (Synergy, LG webOS tooling, bundled
-libraries) keep their own licenses; see [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
-Synergy is used, not redistributed.
+## Important limits
 
-## Trademarks
+Classic protocol 1.4; no TLS, shared clipboard, files or Synergy 3 cloud discovery.
+Only numeric private/loopback addresses are accepted. Real plaintext input needs
+separate approval. Never expose it to the public Internet.
 
-"Synergy" is a trademark of Symless Ltd. This is an independent, unofficial
-project and is not affiliated with or endorsed by Symless Ltd or LG
-Electronics. "LG" and "webOS" are trademarks of LG Electronics. See
-[`docs/brand-and-licensing.md`](docs/brand-and-licensing.md).
+Input is relative uinput. It does not establish absolute Magic Remote cursor
+position. The cursor nudge is experimental and off by default. Handoff controls
+save a local reference; they do not secretly edit the Windows server. There is
+no dock, app-launcher page, or system-wide overlay in the native app.
+
+No TV installation, root change, Git commit, publication or desktop configuration
+change was performed as part of this rebuild.
+
+## Verification and contribution
+
+The native build uses the actual recovered Spice Home runtime/renderer source;
+[provenance and licenses](native/NOTICE.md) identify the inherited files.
+[Verification](native/docs/VERIFICATION.md) separates compiled/tested behavior
+from TV-only acceptance. Badges above are **static snapshot labels**, not a
+fabricated remote CI result or a claim of a published release. Screenshot
+provenance and reproduction are in [the media notes](docs/media/README.md).
+
+[Build and first-TV gates](native/docs/BUILD.md) ·
+[Feature parity](native/docs/PARITY.md) ·
+[Security](native/docs/SECURITY.md) ·
+[Continuation](.thoughts/HANDOFF.md)
+
+Independent implementation; not affiliated with Symless or LG. The software
+shares input, not your desktop display. Preserve upstream attribution and the
+MIT notices when reusing the homescreen foundation.

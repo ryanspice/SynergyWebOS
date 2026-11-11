@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Acceptance-test runner for synergy-tv (QA for the app, dock, home patch, hot-corner tooling).
+  Acceptance-test runner for synergy-tv (QA for the app, home patch, hot-corner tooling).
 
 .DESCRIPTION
   Discovers tests/**/*.Tests.ps1. Each file returns an ordered map of test name -> a
@@ -11,7 +11,7 @@
 
   Suites:
     unit        Pure functions/fixtures (fast, no app needed)
-    acceptance  Product contracts for app/, dock/, scripts/home/, tools/synergy/
+    acceptance  Product contracts for app/, scripts/home/, tools/synergy/
     integration Fixture-based end-to-end (staged build, IPK when app/ is ready)
 
   Exit codes: 0 = all executed checks pass; 1 = failures; 2 = a required check could
@@ -82,15 +82,13 @@ if ($UsePester) {
 # Determine availability of another delegate's scope up front so BLOCKED is explicit.
 $appDir = Join-Path (Get-RepoRoot) 'app'
 $appReady = Test-Path -LiteralPath (Join-Path $appDir 'appinfo.json')
-$dock = Get-DockArtifacts
 $homeArt = Get-HomeArtifacts
 $cornerFiles = Get-CornerToolingFiles
 
-$dockState = if ($dock.Exists) { 'present' } else { 'missing' }
 $homeState = if ($homeArt.ClientPy) { Get-RelativeRepoPath $homeArt.ClientPy } else { 'missing' }
 $cornerCount = @($cornerFiles).Count
 [Console]::WriteLine("synergy-tv tests  repo=$(Get-RepoRoot)")
-[Console]::WriteLine("app ready=$appReady  dock files=$dockState  home patch=$homeState  tools/synergy files=$cornerCount")
+[Console]::WriteLine("app ready=$appReady  home patch=$homeState  tools/synergy files=$cornerCount")
 
 $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
 foreach ($file in (Get-ChildItem -Path $testsRoot -Recurse -Filter '*.Tests.ps1' -File | Sort-Object FullName)) {

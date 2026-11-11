@@ -1,0 +1,17 @@
+{
+  "id": "dev.canopy.synergywebos",
+  "version": "0.4.0",
+  "vendor": "Ryan Spice-Finnie",
+  "type": "native",
+  "main": "synergy-tv",
+  "title": "SynergyWebOS",
+  "icon": "icon.png",
+  "largeIcon": "icon-large.png",
+  "resolution": "1920x1080",
+  "noSplashOnLaunch": true,
+  "requiredACG": [
+    "lunabus.query",
+    "network.query",
+    "application.launcher"
+  ]
+}

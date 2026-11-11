@@ -1,0 +1,19 @@
+{
+  "view":"handoff",
+  "focus":"tab-handoff",
+  "editing":"",
+  "draft":{
+    "server":"",
+    "port":24800.0,
+    "name":"webos-tv",
+    "width":1920.0,
+    "height":1080.0,
+    "dry_run":true,
+    "allow_plaintext":false,
+    "cursor_keepalive":false,
+    "home_target":"system",
+    "home_delay_ms":0.0,
+    "idle_timeout_ms":15000.0
+  },
+  "last_key":""
+}

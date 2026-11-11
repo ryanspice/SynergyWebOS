@@ -93,10 +93,10 @@ $script:OrbisScanExcludedPrefixes = @('scripts/build/', 'tests/', 'scripts/home/
 # Legacy launcher coupling in the PRODUCT (stricter than the Orbis token scan)
 # ---------------------------------------------------------------------------
 function Test-NoLegacyLauncherCoupling {
-    <# The shipped TV app and dock must never reference the old launcher package, its
+    <# The shipped TV app must never reference the old launcher package, its
        home hook, or system UI launchers. tools/ and scripts/home/ may (read-only research /
        cleanup target); those are excluded. #>
-    param([string[]]$ScanRoots = @('app', 'dock'))
+    param([string[]]$ScanRoots = @('app'))
     $issues = @()
     $productScope = @(
         '(?i)com\.canopy\.',
@@ -112,7 +112,7 @@ function Test-NoLegacyLauncherCoupling {
             if (Test-OrbisScanExcluded $rel) { continue }
             $text = Get-TextFileContent -Path $f.FullName
             if ($null -eq $text) { continue }
-            # A dock launch of its own app is fine; a launch of the legacy launcher is not.
+            # Launches of the retired third-party launcher are not permitted.
             foreach ($p in $productScope) {
                 if ($text -match $p) {
                     $m = [regex]::Match($text, $p)
@@ -141,7 +141,7 @@ function Get-OrbisReferenceFiles {
     )
     if (-not $ScanRoots) {
         $ScanRoots = @(
-            'app', 'dock', 'tools', 'scripts', 'tests',
+            'app', 'tools', 'scripts', 'tests',
             'README.md', 'LICENSE', 'CONTRIBUTING.md', 'SECURITY.md', 'package.json', '.gitignore'
         )
     }
@@ -187,7 +187,7 @@ function Test-ForbiddenArtifacts {
     $issues = @()
     $root = Get-RepoRoot
     $bad = Get-ChildItem -LiteralPath $root -Recurse -File -Force -ErrorAction SilentlyContinue |
-        Where-Object { $_.FullName -notmatch '(?i)([\\/])(\.git|node_modules|dist)([\\/]|$)' }
+        Where-Object { $_.FullName -notmatch '(?i)([\\/])(\.git|node_modules|dist|\.ai)([\\/]|$)' }
     foreach ($f in $bad) {
         $rel = Get-RelativeRepoPath $f.FullName
         $name = $f.Name
@@ -237,7 +237,7 @@ function Test-Appinfo {
     if ($a.id -and $a.id -match '^(com\.(palm|webos|lge)|com\.palmdts)\.') { $issues += New-Issue -Id 'appinfo.id' -Severity 'error' -Path $rel -Message "id '$($a.id)' uses a reserved domain" }
     if ($a.version -and $a.version -notmatch '^\d{1,9}\.\d{1,9}\.\d{1,9}$') { $issues += New-Issue -Id 'appinfo.version' -Severity 'error' -Path $rel -Message "version '$($a.version)' must be three non-negative integers (X.Y.Z)" }
     if ($a.type -and $a.type -ne 'web') { $issues += New-Issue -Id 'appinfo.type' -Severity 'error' -Path $rel -Message "only type 'web' is supported, got '$($a.type)'" }
-    # resolution is optional on webOS (default 1920x1080); the dock omits it deliberately.
+    # resolution is optional on webOS (default 1920x1080); older packages may omit it.
     $resolutionProp = $a.PSObject.Properties['resolution']
     if (-not $resolutionProp) {
         $issues += New-Issue -Id 'appinfo.resolution' -Severity 'info' -Path $rel -Message 'no resolution field; webOS defaults to 1920x1080 (declare it on the TV app)'
@@ -601,7 +601,7 @@ function Test-TvLayoutSafety {
             }
         }
         if ($text -match '(?i)position\s*:\s*fixed' -and $f.Extension -match '(?i)\.css$') {
-            # allowed (dock/status pins); informational only, not an issue.
+            # allowed (status pins); informational only, not an issue.
         }
     }
     $issues
@@ -660,23 +660,6 @@ function Test-HomeContract {
         $issues += New-Issue -Id 'home.action' -Severity 'error' -Path $rel -Message 'no system HOME action (luna-send launch or legacy framed HOME)'
     }
     $issues
-}
-
-# ---------------------------------------------------------------------------
-# Dock integration contract
-# ---------------------------------------------------------------------------
-function Get-DockArtifacts {
-    param()
-    $dock = Join-Path (Get-RepoRoot) 'dock'
-    $art = [pscustomobject]@{ DockDir = $dock; Exists = (Test-Path -LiteralPath $dock); Docs = @(); Appinfo = $null; Html = @(); Scripts = @() }
-    if (-not $art.Exists) { return $art }
-    $files = @(Get-ChildItem -LiteralPath $dock -Recurse -File -Force -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notmatch '(?i)[\\/](node_modules|\.git)[\\/]' })
-    $art.Docs = @($files | Where-Object { $_.Name -match '(?i)contract|integration|readme' -and $_.Extension -match '(?i)\.(md|txt|json)$' })
-    $ai = $files | Where-Object { $_.FullName -match '(?i)[\\/]appinfo\.json$' } | Select-Object -First 1
-    if ($ai) { $art.Appinfo = $ai.FullName }
-    $art.Html = @($files | Where-Object { $_.Extension -match '(?i)\.html?$' } | ForEach-Object { $_.FullName })
-    $art.Scripts = @($files | Where-Object { $_.Extension -match '(?i)^\.(js|mjs|ts)$' } | ForEach-Object { $_.FullName })
-    return $art
 }
 
 # ---------------------------------------------------------------------------

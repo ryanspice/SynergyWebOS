@@ -10,10 +10,10 @@ $map['repo: product, tools and docs contain no legacy Orbis coupling'] = {
     Assert-NoIssues $issues | Out-Null
     'no references (scripts/home/ reviewed exception excluded)'
 }
-$map['repo: shipped app/dock have no legacy launcher launch targets'] = {
-    $issues = @(Test-NoLegacyLauncherCoupling -ScanRoots @('app', 'dock'))
+$map['repo: shipped app have no legacy launcher launch targets'] = {
+    $issues = @(Test-NoLegacyLauncherCoupling -ScanRoots @('app'))
     Assert-NoIssues $issues | Out-Null
-    'no legacy launch targets in app/ or dock/'
+    'no legacy launch targets in app/'
 }
 $map['repo: no secrets, backups, IPKs or certificates tracked in the working tree'] = {
     $issues = @(Test-ForbiddenArtifacts)

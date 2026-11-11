@@ -177,10 +177,10 @@ if ($appReady) {
     Add-Results $r; Write-Issues $r
 }
 
-Write-Step 'check' 'No legacy launcher coupling in the shipped app/dock'
-$orbis = @(Test-NoLegacyLauncherCoupling -ScanRoots @('app', 'dock'))
+Write-Step 'check' 'No legacy launcher coupling in the shipped app'
+$orbis = @(Test-NoLegacyLauncherCoupling -ScanRoots @('app'))
 Add-Results $orbis; Write-Issues $orbis
-if ($orbis.Count -eq 0) { Write-Ok 'app/ and dock/ have no legacy launcher references' }
+if ($orbis.Count -eq 0) { Write-Ok 'app/ have no legacy launcher references' }
 $stages.Add([ordered]@{ name = 'no-legacy-coupling'; ok = $orbis.Count -eq 0; errors = $orbis.Count })
 
 Write-Step 'check' 'Forbidden artifacts (secrets/backups/IPKs/certs)'

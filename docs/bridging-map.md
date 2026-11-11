@@ -1,3 +1,5 @@
+> **Historical 0.3.4 documentation.** For the native 0.4.0 candidate, start at [the current README](../README.md) and [native verification](../native/docs/VERIFICATION.md). Dock references are historical; the dock has been removed from this bundle. Do not use legacy web-packaging instructions to produce a native release.
+
 # Bridging map: SynergyWebOS web app vs. native C++20 (SkifreeWebOS-style)
 
 Purpose: compare the current SynergyWebOS **static web app** implementation with a

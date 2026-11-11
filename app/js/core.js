@@ -7,7 +7,6 @@
     id: 'dev.canopy.synergywebos',
     version: '0.3.4',
     name: 'SynergyWebOS',
-    dockAppId: 'dev.canopy.tvdock',
     serverApiPort: 24803
   };
 
@@ -742,31 +741,6 @@
     });
   }
 
-  function prepareDockCatalog(catalog) {
-    var dockDir = '/media/developer/apps/usr/palm/applications/' + APP.dockAppId;
-    var payload = 'window.JUNCTION_DOCK_CATALOG = ' + JSON.stringify({
-      apps: catalog.apps || [],
-      foreground: catalog.foreground || '',
-      running: Array.isArray(catalog.running) ? catalog.running : null,
-      runningKnown: Boolean(catalog.runningKnown),
-      catalogAvailable: true,
-      source: 'junction',
-      generatedAt: new Date().toISOString()
-    }) + ';\n';
-    var base64;
-    try {
-      base64 = root.btoa(root.unescape(root.encodeURIComponent(payload)));
-    } catch (error) {
-      return Promise.reject(new Error('Could not encode the dock catalog.'));
-    }
-    var command = "test -d " + shq(dockDir) + " && printf '%s' '" + base64 + "' | base64 -d > " +
-      shq(dockDir + '/catalog.js');
-    return execRoot(command).then(function (result) {
-      ensureOk(result, 'Could not prepare the dock catalog');
-      return catalog;
-    });
-  }
-
   function launchApp(id) {
     if (!isAppIdValid(id)) return Promise.reject(new Error('Invalid app ID.'));
     if (DEMO) {
@@ -775,17 +749,6 @@
       });
     }
     return luna('luna://com.webos.service.applicationmanager/launch', { id: id });
-  }
-
-  function openDock() {
-    return getCatalog().then(function (catalog) {
-      return prepareDockCatalog(catalog).catch(function () {
-        // A stale catalog is still better than refusing to open the dock.
-        return catalog;
-      });
-    }).then(function () {
-      return launchApp(APP.dockAppId);
-    });
   }
 
   function getTvAddress() {
@@ -835,9 +798,7 @@
     serverStatus: serverStatus,
     getCatalog: getCatalog,
     getCatalogRoot: getCatalogRoot,
-    prepareDockCatalog: prepareDockCatalog,
     launchApp: launchApp,
-    openDock: openDock,
     getTvAddress: getTvAddress,
     normalizeApps: normalizeApps
   };
