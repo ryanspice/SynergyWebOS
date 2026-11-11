@@ -4,9 +4,22 @@
 the handoff `VERIFICATION (4).md`, checked against the delivered tests and
 evidence logs. This is an audit note, not a replacement for the authoring run.
 
-No native build, ARM32 target, TV or uinput device was available in this
-environment. The source-bundle and Python checks below were re-run on Windows;
-native CTest and sanitizer runs were read from the handoff logs.
+At audit time no native build was available in this environment. A later local
+`WebOSBuild` rerun (host Release + ASan/UBSan, ARM32 cross-build, IPK) is recorded
+in [docs/native-build-evidence-0.4.0.md](../../docs/native-build-evidence-0.4.0.md).
+The source-bundle and Python checks below were re-run on Windows; the original
+handoff CTest/sanitizer claims were read from its logs.
+
+## Local rerun (2026-11-11)
+
+| Check | Result |
+|---|---|
+| Host Release CTest | 4/4 pass |
+| Host ASan/UBSan CTest (UI off) | 4/4 pass |
+| ARM32 cross-build | ELF32 ARM for all three executables; stage audit PASS |
+| ARM IPK | `dev.canopy.synergywebos_0.4.0_arm.ipk`, SHA-256 `74310a39…822bf` |
+
+These are host/ARM-build results, not TV evidence.
 
 ## What was re-run
 
