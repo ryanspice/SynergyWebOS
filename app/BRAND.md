@@ -127,7 +127,7 @@ The package metadata in [`appinfo.json`](appinfo.json) is therefore:
 
 - id: `dev.canopy.synergywebos`
 - title: `SynergyWebOS`
-- version: `0.3.2`
+- version: `0.3.4`
 - vendor: `Ryan Spice-Finnie`
 
 A new ID is justified only for a true fork, a different publisher, or an app

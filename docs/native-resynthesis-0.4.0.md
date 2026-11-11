@@ -146,8 +146,10 @@ web app was also red before this import and is fixed here.
   case sensitivity, the IPK ustar-prefix parser, and the `.ai` artifact scan.
 - Made `native/tests/bundle_tests.py` UTF-8 and `.ai`-aware.
 - Updated `INTENT.md`, `TESTING.md`, `SECURITY.md`, `app/BRAND.md` to the native
-  product; fixed the legacy 0.3.2 labels; added the native runtime section to
-  `THIRD_PARTY_NOTICES.md`; aligned the licence holder.
+  product; fixed the legacy web UI's 0.3.2 labels and the remaining live 0.3.2
+  metadata fields; added the native runtime section to `THIRD_PARTY_NOTICES.md`;
+  aligned the licence holder. Historical 0.3.2/hurrspice reports remain, but
+  every one is banner-labelled legacy.
 - Allowed nested licence/notice files and README badge SVGs through the repo
   guard (they were false positives), and moved the incomplete bundle checksum
   manifest out of the tree to `.ai/archive/`.
@@ -158,3 +160,32 @@ manifest are handoff-only and not tracked; the source tree is the reproducible
 artefact. Checks after these fixes: docs links PASS (49 files / 145 links), repo
 guards PASS (0 violations), native bundle tests 8/8, legacy suite 69 pass / 0
 fail / 1 skip (no POSIX `sh`).
+
+## 6. Prior-thread reconciliation (re-read against commit `00207e1`)
+
+Thread `40f3e519` is complete. Thread `7c27ad6d` is still running and has no
+final report; after the import landed it began re-reviewing the moved tree, so
+its partial findings are used but not treated as a finished review.
+
+| Prior claim | Status against the native build |
+|---|---|
+| 40f3e519: stabilize the 0.3.4 web app for 1.0 and retain the dock | **Superseded.** The owner rewrote the product natively; the dock is retired (D-011). The web app is migration/rollback source only. |
+| 40f3e519: partial-frame timeout is a P0 | **FIXED in native source** (`protocol.cpp:58-73`); the mid-frame-stall soak remains an acceptance test, not a code fix. |
+| 40f3e519: app-button root access and reboot persistence | **Architecture replaced.** The app no longer asks HBC to execute root commands; a provisioned daemon + init.d hook replaces it. Cold boot is still unproven. |
+| 40f3e519: cursor keepalive unverified | **Still device-gated.** The native nudge is optional, off by default and single-threaded; absolute cursor sync remains a non-goal. |
+| 40f3e519: modifier entry / pointer sync P1 | **Modifier entry fixed in source**; pointer behavior remains relative-only and needs a TV decision. |
+| 40f3e519: status polling can stall on overlap | **Old prototype.** The native control plane has a different, lower-severity serial-stall risk (N7), not the same defect. |
+| 40f3e519: repo guard false positives, 71/3 test baseline | **Fixed.** Guard 0 violations; legacy suite 69/0/1; native bundle tests 8/8. |
+| 40f3e519 acceptance budgets (cold boots, handoffs, reconnects, idle soak) | **Still valid** and adopted below, extended with UID/jail/ARM/IPK gates. |
+| 7c27ad6d: CI is red (guard, IPK reader, `.ai` scan) | **Fixed locally** (guard `(?-i)`, ustar-prefix parser, `.ai` exclusion); remote CI has not been re-observed, and no native job exists yet. |
+| 7c27ad6d: app-ID rename breaks in-place upgrade; D-007 is false | **Corrected.** D-007 now records hurrspice→canopy; D-012 requires a migration/rollback release note. |
+| 7c27ad6d: About/footer says 0.3.2 | **Fixed** in the legacy UI; remaining 0.3.2/hurrspice text lives only in banner-labelled historical reports. |
+| 7c27ad6d: dock IPK is stale/mismatched; the build does not package it | **Retired.** The dock cannot be shipped because it no longer exists in the tree. |
+| 7c27ad6d: cursor keepalive thread safety | **Superseded.** The native keepalive runs on the session thread; the remaining issue is visibility/drift on hardware. |
+| 7c27ad6d: `.ai` scratch breaks scans | **Fixed** in `Checks.ps1` and `bundle_tests.py`. |
+| 7c27ad6d: 74-pass vs 71/3-pass conflict | **Reconciled by command/environment.** The maintained result is 69/0/1 (legacy) plus 8/8 native bundle tests; prior totals depended on TEMP and `.ai` fixtures. |
+| 7c27ad6d: final review | **Not delivered.** The thread is still running; its partial findings above were incorporated and checked against the new tree. |
+
+**Net:** none of the old web-runtime findings is still a release blocker for the
+native build. The surviving blockers are the native target/root/evidence gates
+in section 4, plus the native CI/release path.

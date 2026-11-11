@@ -32,7 +32,7 @@ required check was **BLOCKED** by a missing dependency (listed in the output).
 
 | File | Meaning |
 | --- | --- |
-| `dist/synergy-tv-app-<version>.ipk` | installable package (app ID preserved: `dev.hurrspice.synergywebos`) |
+| `dist/synergy-tv-app-<version>.ipk` | installable package (app ID preserved: `dev.canopy.synergywebos`) |
 | `dist/synergy-tv-app-<version>.ipk.sha256` | `sha256  filename` sidecar |
 | `dist/build-info.json` | receipt: status, artifact + hash, per-stage results, warnings, override list, exclusions, targets, tool versions |
 | `dist/staging/` | exact staged input to `ares-package` (inspect what shipped) |

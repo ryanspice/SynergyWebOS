@@ -177,7 +177,7 @@ service exit code is not visual proof.
 
 - Source root: `app/`
 - Package ID: `dev.canopy.synergywebos` (upgrade-compatible; see `BRAND.md`)
-- Version: `0.3.2`
+- Version: `0.3.4`
 - Entry: `index.html`
 - Icons: `icon.png`, `icon-large.png`
 - Permissions: `lunabus.query`, `network.query`, `application.launcher`
