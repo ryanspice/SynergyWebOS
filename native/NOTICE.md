@@ -1,6 +1,6 @@
 # Notices and foundation provenance
 
-SynergyWebOS native 0.4.0 is an independent developer candidate. Synergy is a
+SynergyWebOS native 0.4.1 is an independent developer candidate. Synergy is a
 Symless product. This application is not the official Synergy 3 desktop GUI.
 No proprietary Synergy executable, desktop service, artwork, credentials, or
 license activation material is included in the native implementation.
@@ -28,4 +28,7 @@ No font files or third-party runtime libraries are bundled in this source handof
 Protocol reference inputs: the existing 0.3.4 Python client, Symless's public
 synergy-micro-client source, and the classic Synergy 1.4 protocol message shapes.
 This is a native reimplementation, not a claim of modern Synergy 3 service,
-cloud discovery, account, TLS, clipboard or file-transfer compatibility.
+cloud discovery, account, Synergy-native TLS, clipboard or file-transfer compatibility.
+The optional 0.4.1 controller bridge uses its own mutually authenticated TLS link
+and the platform-provided OpenSSL 3 libraries; no platform TLS libraries or
+pairing keys are bundled into the TV package.

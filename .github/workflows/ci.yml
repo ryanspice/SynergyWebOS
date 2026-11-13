@@ -108,7 +108,7 @@ jobs:
         run: ./tests/lib/Run-Tests.ps1
 
   native:
-    name: Native 0.4.0 (Linux host)
+    name: Native 0.4.1 (Linux host)
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
@@ -122,7 +122,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             build-essential cmake ninja-build python3 \
-            libsdl2-dev libfreetype6-dev libjson-c-dev libpng-dev
+            libsdl2-dev libfreetype6-dev libjson-c-dev libpng-dev \
+            libssl-dev openssl xvfb xauth libgles2-mesa-dev
 
       - name: Configure Release
         run: cmake -S native -B native/build/ci -G Ninja -DCMAKE_BUILD_TYPE=Release -DSYNERGY_STRICT=ON
@@ -131,7 +132,21 @@ jobs:
         run: cmake --build native/build/ci --parallel 4
 
       - name: Test Release
-        run: ctest --test-dir native/build/ci --output-on-failure
+        run: |
+          fixture_root="$(mktemp -d /tmp/sy041.XXXXXX)"
+          trap 'rm -rf -- "$fixture_root"' EXIT
+          SYNERGY_TEST_POSIX_ROOT="$fixture_root" TMPDIR="$fixture_root" \
+            ctest --test-dir native/build/ci --output-on-failure
+
+      - name: Build and test desktop input bridge
+        run: |
+          cmake -S desktop/input-bridge -B desktop/input-bridge/build/ci -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build desktop/input-bridge/build/ci --parallel 4
+          fixture_root="$(mktemp -d /tmp/sy041.XXXXXX)"
+          trap 'rm -rf -- "$fixture_root"' EXIT
+          export TMPDIR="$fixture_root"
+          python3 desktop/input-bridge/tests/proxy_loopback.py desktop/input-bridge/build/ci/synergy-input-bridge
+          python3 desktop/input-bridge/tests/native_proxy_e2e.py desktop/input-bridge/build/ci/synergy-input-bridge native/build/ci/synergy-daemon native/build/ci/synergy-tvctl
 
       - name: Configure ASan/UBSan
         run: cmake -S native -B native/build/asan -G Ninja -DCMAKE_BUILD_TYPE=Debug -DSYNERGY_STRICT=ON -DSYNERGY_SANITIZE=ON -DSYNERGY_BUILD_UI=OFF
@@ -140,4 +155,8 @@ jobs:
         run: cmake --build native/build/asan --parallel 4
 
       - name: Test ASan/UBSan
-        run: ctest --test-dir native/build/asan --output-on-failure
+        run: |
+          fixture_root="$(mktemp -d /tmp/sy041.XXXXXX)"
+          trap 'rm -rf -- "$fixture_root"' EXIT
+          SYNERGY_TEST_POSIX_ROOT="$fixture_root" TMPDIR="$fixture_root" \
+            ctest --test-dir native/build/asan --output-on-failure

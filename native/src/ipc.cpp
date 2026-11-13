@@ -142,12 +142,11 @@ namespace synergy {
         if(inode_&&lstat(path_.c_str(),&s)==0&&s.st_ino==inode_&&S_ISSOCK(s.st_mode)&&s.st_uid==geteuid())unlink(path_.c_str());
         if(lock_>=0)close(lock_);
     }
-    void Broker::poll_once(const std::function<Json(const Json&)>& handle,int timeout){
-        pollfd p{
-            socket_,POLLIN,0}
-        ;
-        int n=poll(&p,1,timeout);
+    void Broker::poll_once(const std::function<Json(const Json&)>& handle,int timeout,int wake_fd){
+        std::array<pollfd,2> p{{{socket_,POLLIN,0},{wake_fd,POLLIN,0}}};
+        int n=poll(p.data(),p.size(),timeout);
         if(n<=0)return;
+        if(p[1].revents||!(p[0].revents&POLLIN))return;
         Fd c(accept4(socket_,nullptr,nullptr,SOCK_CLOEXEC|SOCK_NONBLOCK));
         if(c.n<0)return;
         try{

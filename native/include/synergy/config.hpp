@@ -16,6 +16,8 @@ struct Config {
     std::string home_target="system";
     int home_delay_ms=0;
     int idle_timeout_ms=15000;
+    bool input_bridge=false;
+    std::string bridge_ca_file,bridge_cert_file,bridge_key_file,bridge_server_name;
     Json json()const;
     static Config from_json(const Json&);
     void validate(bool connecting=true)const;

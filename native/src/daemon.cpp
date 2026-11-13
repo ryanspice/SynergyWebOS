@@ -4,6 +4,8 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <signal.h>
+#include <fcntl.h>
+#include <cerrno>
 #include <fstream>
 #include <iostream>
 #include <limits>
@@ -12,9 +14,44 @@
 namespace synergy {
     namespace {
         volatile sig_atomic_t stopped=0;
+        volatile sig_atomic_t shutdown_fd=-1;
         void signal_stop(int){
+            const int saved_errno=errno;
             stopped=1;
+            const int fd=shutdown_fd;
+            if(fd>=0){
+                const char byte=1;
+                ssize_t written;
+                do { written=write(fd,&byte,1); } while(written<0&&errno==EINTR);
+            }
+            errno=saved_errno;
         }
+        struct ShutdownWake {
+            int fds[2]{-1,-1};
+            struct sigaction old_term{},old_int{};
+            ShutdownWake(){
+                if(pipe2(fds,O_CLOEXEC|O_NONBLOCK)!=0)throw std::runtime_error("Cannot create daemon shutdown wakeup");
+                struct sigaction action{};
+                action.sa_handler=signal_stop;
+                sigemptyset(&action.sa_mask);
+                shutdown_fd=fds[1];
+                if(sigaction(SIGTERM,&action,&old_term)!=0){
+                    shutdown_fd=-1;close(fds[0]);close(fds[1]);
+                    throw std::runtime_error("Cannot install daemon termination handler");
+                }
+                if(sigaction(SIGINT,&action,&old_int)!=0){
+                    sigaction(SIGTERM,&old_term,nullptr);
+                    shutdown_fd=-1;close(fds[0]);close(fds[1]);
+                    throw std::runtime_error("Cannot install daemon interrupt handler");
+                }
+            }
+            ~ShutdownWake(){
+                sigaction(SIGTERM,&old_term,nullptr);
+                sigaction(SIGINT,&old_int,nullptr);
+                shutdown_fd=-1;
+                close(fds[0]);close(fds[1]);
+            }
+        };
         const std::filesystem::path Hook="/var/lib/webosbrew/init.d/60-synergy-native";
         bool legacy_running(){
             std::ifstream pidfile("/var/lib/webosbrew/junction.pid");
@@ -126,8 +163,7 @@ namespace synergy {
         catch(const std::exception& e){
             config_error=e.what();
         }
-        signal(SIGTERM,signal_stop);
-        signal(SIGINT,signal_stop);
+        ShutdownWake shutdown;
         signal(SIGPIPE,SIG_IGN);
         auto begin=[&](bool run_once){
             if(!config_error.empty())throw std::runtime_error("Saved config invalid; preserved on disk. Repair it explicitly before Start.");
@@ -204,7 +240,10 @@ namespace synergy {
         ;
         std::cout<<"SynergyWebOS native daemon "<<SYNERGY_VERSION<<"; local UID-scoped control; no TCP listener\n"<<std::flush;
         while(!stopped){
-            broker.poll_once(dispatch);
+            // Normal idle service blocks until local control or a shutdown
+            // signal. --once is a diagnostic mode that also watches completion
+            // of the client worker without a new IPC request.
+            broker.poll_once(dispatch,once?25:-1,shutdown.fds[0]);
             if(start&&once&&!client.running())break;
         }
         client.stop();

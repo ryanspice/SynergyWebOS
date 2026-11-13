@@ -12,7 +12,7 @@ public:
     Broker(const std::filesystem::path&,uid_t controller);
     ~Broker();
     Broker(const Broker&)=delete;Broker& operator=(const Broker&)=delete;
-    void poll_once(const std::function<Json(const Json&)>&,int timeout_ms=25);
+    void poll_once(const std::function<Json(const Json&)>&,int timeout_ms=25,int wake_fd=-1);
 };
 Json request(const std::filesystem::path&,const Json&,int timeout_ms=2000);
 }

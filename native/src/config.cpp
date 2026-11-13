@@ -65,7 +65,19 @@ namespace synergy {
         for(unsigned char c:name)if(!((c>='a'&&c<='z')||(c>='A'&&c<='Z')||(c>='0'&&c<='9')||c=='.'||c=='_'||c=='-'))throw std::runtime_error("Unsafe screen name");
         if(home_target!="system"&&home_target!="off")throw std::runtime_error("Home target must be system or off");
         if(home_delay_ms<0||home_delay_ms>5000||idle_timeout_ms<3000||idle_timeout_ms>60000)throw std::runtime_error("Invalid timeout");
-        if(connecting&&!dry_run&&!allow_plaintext)throw std::runtime_error("Real input requires explicit allow_plaintext on a trusted LAN; TLS is not implemented");
+        if(input_bridge){
+            for(const auto* file:{&bridge_ca_file,&bridge_cert_file,&bridge_key_file}){
+                const std::filesystem::path path(*file);
+                if(file->empty()||file->find('\0')!=std::string::npos||file->size()>512||!path.is_absolute()||path.lexically_normal()!=path)
+                    throw std::runtime_error("Input bridge pairing paths must be absolute and normalized");
+            }
+            if(bridge_server_name.empty()||bridge_server_name.size()>128)
+                throw std::runtime_error("Input bridge certificate identity required");
+            for(unsigned char c:bridge_server_name)
+                if(!((c>='a'&&c<='z')||(c>='A'&&c<='Z')||(c>='0'&&c<='9')||c=='.'||c=='-'||c==':'))
+                    throw std::runtime_error("Invalid input bridge certificate identity");
+        }
+        if(connecting&&!dry_run&&!allow_plaintext&&!input_bridge)throw std::runtime_error("Real input requires explicit allow_plaintext on a trusted LAN or an authenticated input bridge");
     }
     Json Config::json()const{
         auto j=Json::object();
@@ -80,13 +92,18 @@ namespace synergy {
         j.set("home_target",Json::string(home_target));
         j.set("home_delay_ms",Json::number(home_delay_ms));
         j.set("idle_timeout_ms",Json::number(idle_timeout_ms));
+        j.set("input_bridge",Json::boolean(input_bridge));
+        j.set("bridge_ca_file",Json::string(bridge_ca_file));
+        j.set("bridge_cert_file",Json::string(bridge_cert_file));
+        j.set("bridge_key_file",Json::string(bridge_key_file));
+        j.set("bridge_server_name",Json::string(bridge_server_name));
         return j;
     }
     Config Config::from_json(const Json& j){
         if(!j.object_type())throw std::runtime_error("Config must be an object");
         Config c;
         const std::set<std::string> allowed{
-            "server","port","name","width","height","dry_run","allow_plaintext","cursor_keepalive","home_target","home_delay_ms","idle_timeout_ms"}
+            "server","port","name","width","height","dry_run","allow_plaintext","cursor_keepalive","home_target","home_delay_ms","idle_timeout_ms", "input_bridge","bridge_ca_file","bridge_cert_file","bridge_key_file","bridge_server_name"}
         ;
         for(const auto& [k,v]:j.members()){
             (void)v;
@@ -116,6 +133,10 @@ namespace synergy {
         text("server",c.server);
         text("name",c.name);
         text("home_target",c.home_target);
+        text("bridge_ca_file",c.bridge_ca_file);
+        text("bridge_cert_file",c.bridge_cert_file);
+        text("bridge_key_file",c.bridge_key_file);
+        text("bridge_server_name",c.bridge_server_name);
         number("port",c.port);
         number("width",c.width);
         number("height",c.height);
@@ -124,6 +145,7 @@ namespace synergy {
         flag("dry_run",c.dry_run);
         flag("allow_plaintext",c.allow_plaintext);
         flag("cursor_keepalive",c.cursor_keepalive);
+        flag("input_bridge",c.input_bridge);
         c.validate(false);
         return c;
     }

@@ -1,5 +1,25 @@
 # Native continuation — do not restart the implementation
 
+**Next release scope:** [0.4.1 focused PC input forwarding](../native/docs/INPUT-0.4.1.md).
+The 0.4.1 candidate and native PC XInput/mTLS companion are implemented and built;
+the task's LEAD-SYNTHESIS and verification reports are in
+`.ai/outbox/input-0.4.1-implementation-20261113/`. The ARM IPK is `addebe911815...`;
+see that record for host, sanitizer, Windows and ARM gates. Physical acceptance,
+broader HID controls and PC-side suppression remain open. The working 0.4.0 TV
+installation remains the accepted baseline; no 0.4.1 deployment occurred.
+
+**Current target continuation:** read
+[`native/docs/TV-EXECUTION.md`](../native/docs/TV-EXECUTION.md) before treating the
+older gates below as current. ARM packaging, jailed UI rendering and narrow LS2
+status transport have target evidence. An explicit device rescan made the cursor
+visible, confirmed by the owner, and automatic discovery is now target-verified.
+The absolute-coordinate candidate IPK `719ff310...` is installed and connected;
+the owner confirmed full-screen range and smooth movement after leave/re-entry
+in Twitch. Broader input/lifecycle gates remain separate. The owner now
+requests Twitch in front for
+testing, superseding the earlier Crave/football constraint. No Git publication
+or autostart change has been performed in this execution task.
+
 Owner request: rebuild Synergy TV on the same native foundation as Spice Home C++
 and SkiFree. This is implemented under `native/`; 0.3.4 source is retained as migration reference, with the dock removed.
 
@@ -67,3 +87,48 @@ Preserve ordinary gear behavior; remapping the button is not menu insertion.
 
 README badges are local static SVG snapshot labels. Screenshots are real GLES2
 host captures, labeled as such, with no dock and no claim of TV validation.
+
+## Host bug/performance fix pass — 2026-11-11
+
+Owner requested rereview followed by fixes. The five findings from the preserved
+`.ai/outbox/audit-1111/REVIEW.md` have been reconciled into native protocol,
+subprocess, UI worker and renderer source, with core and actual UI regression
+tests. See `native/docs/VERIFICATION.md` for the separately attributed host
+results and `.ai/evidence/fix-audit-1111/synthesis-receipt.json` for provenance.
+Preimages remain in `.ai/archive/fix-audit-1111/`; do not restore over later work.
+
+Host acceptance is not TV acceptance. Continue with the existing ARM/IPK and
+UID/jail/input/Luna/manual-server gates above only with the required separate
+authority. UI sanitizer coverage, live shortcut/repeat cleanup, target EOF CPU
+and real 4K text performance remain unverified. Publication is not authorized.
+
+## Review findings 2–5 fixed on host — 2026-11-12
+
+Findings 2–5 of `.ai/outbox/tv-cpp-review-1111/REVIEW.md` are fixed in source
+with tests; see `native/docs/VERIFICATION.md` (November 12 section) and
+`.ai/evidence/tv-cpp-fixes-1112/provenance.json`. **Finding 1 (reserved Stop
+path) is still open** and is the next product fix. TV latency/CPU acceptance,
+ARM build and target texture limit remain unmeasured.
+
+## Integrated footprint and scheduling implementation - 2026-11-12
+
+The owner requested three Terra 6.1 medium implementation delegates and lead
+synthesis. The lead completed the partial returns and adopted all five host
+source findings from `.ai/outbox/source-footprint-review-1112/REVIEW.md`.
+The previous open-Stop, 16-repeat chunk and 50/100 ms UI polling notes above are
+historical; the latest native/docs/VERIFICATION.md section records current behavior.
+
+Reserved Stop cancels stale starts; client work is checked per repeat; packet
+timestamps and delayed hold expiry avoid stale Home/Alt. A 256 KiB retained
+payload budget plus a strict 4,096-frame cap fail closed on overload, with streamed
+discard of ignored bodies. Eventfd/deadline client waits, a shutdown-aware idle
+broker and worker-result SDL wakeups remove fixed normal-service polling.
+Text uses alpha-only storage/upload. Size-focused Release settings are opt-in.
+
+Stable-source host checks and source/receipt hashes are recorded under
+`.ai/evidence/performance-implementation-1112/`; exact dirty preimages are under
+`.ai/archive/performance-implementation-1112/`. See the synthesis report for
+delegate attribution, numeric host results and implementation limits. Do not
+infer ARM/TV acceptance from these checks. Ordered later input can still wait
+behind a slow repeat batch; actual uinput/backpressure and release cleanup need
+the existing target session. No commit/push/deploy/provisioning was authorized.

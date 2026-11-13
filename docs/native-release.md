@@ -8,15 +8,29 @@ owner-gated and requires the TV gates in `docs/native-tv-runbook.md` and
 ## Versioning and identity
 
 - Package ID: `dev.canopy.synergywebos`.
-- Candidate version: `0.4.0` (source of truth: `native/appinfo.json` and
+- Candidate version: `0.4.1` (source of truth: `native/appinfo.json` and
   `native/CMakeLists.txt`).
-- `0.4.0` may be published only from the exact frozen bytes that passed the TV
+- A native version may be published only from the exact frozen bytes that passed the TV
   gates. Test IPKs before acceptance are internal; record their SHA-256 and
   bump the patch or fully uninstall between iterations.
 - `1.0` is a later stability claim: published 0.4.0, owner feedback, and the
   soak budgets closed with no unrecovered failures.
 - The legacy web app remains `0.3.4` rollback/migration source and is **never**
   packaged under the 0.4.0 name or published as a release.
+
+## Source tags and draft preparation
+
+Source integration, an annotated `v0.4.1` tag and a **draft** GitHub Release can
+record the candidate before physical acceptance. Attach exact checksummed
+candidate assets privately to that draft. Keep its candidate status explicit.
+The stable publication gates below still apply; a tag alone does not satisfy
+them. Draft apps-repo and awesome-webos PRs may be prepared for review with their
+unmet TV/public-asset requirements stated and unchecked. Do not merge those
+submissions or publish stable binaries until their own gates pass.
+
+The 0.4.0 pointer baseline is described in
+[TV execution](../native/docs/TV-EXECUTION.md). New 0.4.1 evidence and capability
+gaps are in [candidate verification](../native/docs/INPUT-0.4.1.md).
 
 ## Build and artifact
 
@@ -52,11 +66,15 @@ owner-gated and requires the TV gates in `docs/native-tv-runbook.md` and
 
 Only the owner authorizes a release. Publish the IPK and checksum as GitHub
 Release assets; never commit the IPK. Do not open or update an apps-repo entry
-for the legacy web app or the removed dock. A native store/apps-repo submission
-is a separate decision after TV acceptance.
+for the legacy web app or the removed dock. A ready-to-merge native store/apps-repo submission
+requires TV acceptance; candidate draft preparation is described above.
 
 ## Rollback
 
+- For a 0.4.1 trial, retain and restore the accepted 0.4.0 IPK **and** its
+  protected daemon/runtime configuration together. An app downgrade alone
+  does not downgrade the separately provisioned daemon. Keep pairing material
+  private and disable the bridge when restoring the classic baseline.
 - Reinstall the retained 0.3.4 package and restore its startup route.
 - Stop the native daemon and disable the native boot hook first.
 - Restore the Synergy server config only from the owner's backup; do not rewrite

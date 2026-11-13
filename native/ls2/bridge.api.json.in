@@ -1,0 +1,5 @@
+{
+  "dev.canopy.synergywebos.control": [
+    "dev.canopy.synergywebos.control/control/request"
+  ]
+}
