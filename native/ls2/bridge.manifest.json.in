@@ -1,0 +1,8 @@
+{
+  "id": "dev.canopy.synergywebos.control",
+  "version": "0.4.0",
+  "roleFiles": ["@ROOT_OWNED_BRIDGE_ROLE_FILE@"],
+  "apiPermissionFiles": ["@ROOT_OWNED_BRIDGE_API_FILE@"],
+  "clientPermissionFiles": ["@ROOT_OWNED_UI_CONTROL_CLIENT_PERMISSION_FILE@"],
+  "serviceFiles": ["@ROOT_OWNED_BRIDGE_SERVICE_FILE@"]
+}

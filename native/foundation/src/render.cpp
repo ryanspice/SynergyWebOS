@@ -3,9 +3,10 @@
 #include <cstring>
 #include <iostream>
 #include <limits>
+#include <optional>
 #include <stdexcept>
 namespace spice {
-  constexpr GLenum GL_VENDOR_=0x1f00,GL_RENDERER_=0x1f01,GL_VERSION_=0x1f02,GL_MAX_TEXTURE_SIZE_=0xd33,GL_BLEND_=0xbe2,GL_DEPTH_TEST_=0xb71,GL_SRC_ALPHA_=0x302,GL_ONE_MINUS_SRC_ALPHA_=0x303,GL_COLOR_BUFFER_BIT_=0x4000,GL_VERTEX_SHADER_=0x8b31,GL_FRAGMENT_SHADER_=0x8b30,GL_COMPILE_STATUS_=0x8b81,GL_LINK_STATUS_=0x8b82,GL_ARRAY_BUFFER_=0x8892,GL_DYNAMIC_DRAW_=0x88e8,GL_FLOAT_=0x1406,GL_TRIANGLES_=4,GL_TEXTURE_2D_=0xde1,GL_TEXTURE0_=0x84c0,GL_RGBA_=0x1908,GL_UNSIGNED_BYTE_=0x1401,GL_TEXTURE_MIN_FILTER_=0x2801,GL_TEXTURE_MAG_FILTER_=0x2800,GL_LINEAR_=0x2601,GL_TEXTURE_WRAP_S_=0x2802,GL_TEXTURE_WRAP_T_=0x2803,GL_CLAMP_TO_EDGE_=0x812f,GL_UNPACK_ALIGNMENT_=0xcf5,GL_PACK_ALIGNMENT_=0xd05;
+  constexpr GLenum GL_VENDOR_=0x1f00,GL_RENDERER_=0x1f01,GL_VERSION_=0x1f02,GL_MAX_TEXTURE_SIZE_=0xd33,GL_BLEND_=0xbe2,GL_DEPTH_TEST_=0xb71,GL_SRC_ALPHA_=0x302,GL_ONE_MINUS_SRC_ALPHA_=0x303,GL_COLOR_BUFFER_BIT_=0x4000,GL_VERTEX_SHADER_=0x8b31,GL_FRAGMENT_SHADER_=0x8b30,GL_COMPILE_STATUS_=0x8b81,GL_LINK_STATUS_=0x8b82,GL_ARRAY_BUFFER_=0x8892,GL_DYNAMIC_DRAW_=0x88e8,GL_FLOAT_=0x1406,GL_TRIANGLES_=4,GL_TEXTURE_2D_=0xde1,GL_TEXTURE0_=0x84c0,GL_RGBA_=0x1908,GL_ALPHA_=0x1906,GL_UNSIGNED_BYTE_=0x1401,GL_TEXTURE_MIN_FILTER_=0x2801,GL_TEXTURE_MAG_FILTER_=0x2800,GL_LINEAR_=0x2601,GL_TEXTURE_WRAP_S_=0x2802,GL_TEXTURE_WRAP_T_=0x2803,GL_CLAMP_TO_EDGE_=0x812f,GL_UNPACK_ALIGNMENT_=0xcf5,GL_PACK_ALIGNMENT_=0xd05;
   Gl::Gl(Sdl& sdl){
 #define LOAD(name) name=reinterpret_cast<decltype(name)>(sdl.GL_GetProcAddress("gl" #name));if(!name)throw std::runtime_error("Missing GL symbol: gl" #name)
     LOAD(GetString);
@@ -173,11 +174,11 @@ void main(){
     if(vbo_)gl_.DeleteBuffers(1,&vbo_);
     if(program_)gl_.DeleteProgram(program_);
   }
-  Texture Renderer::upload(int w,int h,const unsigned char* data){
+  Texture Renderer::upload(int w,int h,const unsigned char* data,bool alpha){
     Texture t;
     t.w=w;
     t.h=h;
-    t.bytes=static_cast<size_t>(w)*h*4;
+    t.bytes=static_cast<size_t>(w)*h*(alpha?1:4);
     gl_.GenTextures(1,&t.id);
     gl_.ActiveTexture(GL_TEXTURE0_);
     gl_.BindTexture(GL_TEXTURE_2D_,t.id);
@@ -186,7 +187,8 @@ void main(){
     gl_.TexParameteri(GL_TEXTURE_2D_,GL_TEXTURE_MAG_FILTER_,GL_LINEAR_);
     gl_.TexParameteri(GL_TEXTURE_2D_,GL_TEXTURE_WRAP_S_,GL_CLAMP_TO_EDGE_);
     gl_.TexParameteri(GL_TEXTURE_2D_,GL_TEXTURE_WRAP_T_,GL_CLAMP_TO_EDGE_);
-    gl_.TexImage2D(GL_TEXTURE_2D_,0,GL_RGBA_,w,h,0,GL_RGBA_,GL_UNSIGNED_BYTE_,data);
+    const GLenum format=alpha?GL_ALPHA_:GL_RGBA_;
+    gl_.TexImage2D(GL_TEXTURE_2D_,0,format,w,h,0,format,GL_UNSIGNED_BYTE_,data);
     if(gl_.GetError()!=0)throw std::runtime_error("GPU texture upload failed");
     return t;
   }
@@ -237,6 +239,20 @@ void main(){
     gl_.VertexAttribPointer(1,2,GL_FLOAT_,0,4*sizeof(float),reinterpret_cast<void*>(2*sizeof(float)));
   }
   void Renderer::end(){
+    while(widths_.size()>384){
+      auto oldest=std::min_element(widths_.begin(),widths_.end(),[](auto& a,auto& b){
+        return a.second.second<b.second.second;
+      });
+      widths_.erase(oldest);
+    }
+    while(ellipses_.size()>384){
+      auto oldest=std::min_element(ellipses_.begin(),ellipses_.end(),[](auto& a,auto& b){
+        return a.second.second<b.second.second;
+      });
+      ellipses_.erase(oldest);
+    }
+    // Metrics are small, but sizes/densities can change; bound the cache.
+    if(glyph_metrics_.size()>8192)glyph_metrics_.clear();
     while((texts_.size()>384||text_bytes_>24*1024*1024)&&texts_.size()>1){
       auto oldest=std::min_element(texts_.begin(),texts_.end(),[](auto& a,auto& b){
         return a.second.last_use<b.second.last_use;
@@ -298,12 +314,21 @@ void main(){
     {},
     radius,0,t.id,uv);
   }
-  static std::vector<unsigned long> decode_utf8(const std::string& s){
-    std::vector<unsigned long> out;
-    for(size_t i=0;i<s.size()&&out.size()<512;){
+  struct Decoded {
+    unsigned long code;
+    size_t byte;
+  };
+  // Code points with the byte offset where each starts; invalid sequences
+  // become '?'. Bounded to 512 code points, as drawing always was. `end`
+  // receives the byte offset just after the last decoded code point.
+  static std::vector<Decoded> decode_utf8(const std::string& s,size_t* end=nullptr){
+    std::vector<Decoded> out;
+    size_t i=0;
+    while(i<s.size()&&out.size()<512){
+      const size_t start=i;
       auto b=static_cast<unsigned char>(s[i++]);
       if(b<128){
-        out.push_back(b);
+        out.push_back({b,start});
         continue;
       }
       int n=b>=0xf0?3:b>=0xe0?2:b>=0xc0?1:0;
@@ -318,82 +343,139 @@ void main(){
         c=(c<<6)|(v&63);
         ++i;
       }
-      out.push_back(valid?c:static_cast<unsigned long>('?'));
+      out.push_back({valid?c:static_cast<unsigned long>('?'),start});
     }
+    if(end)*end=i;
     return out;
   }
-  TextTexture Renderer::rasterize(const std::string& value,float logical_size){
-    float density=std::clamp(view_.scale,.5f,4.f);
-    int px=std::max(8,static_cast<int>(std::lround(logical_size*density)));
+  float Renderer::density()const{
+    return std::clamp(view_.scale,.5f,4.f);
+  }
+  int Renderer::pixels(float logical_size)const{
+    return std::max(8,static_cast<int>(std::lround(logical_size*density())));
+  }
+  void Renderer::set_pixels(int px){
+    if(px==ft_px_)return;
     if(ft_.SetPixels(ft_.face,0,static_cast<FT_UInt>(px)))throw std::runtime_error("Font size unavailable");
-    struct Glyph {
-      int x,top,w,h;
-      std::vector<unsigned char> pixels;
-    };
-    std::vector<Glyph> glyphs;
-    int pen=0,asc=0,desc=0;
-    unsigned previous=0;
-    for(auto c:decode_utf8(value)){
-      auto idx=ft_.CharIndex(ft_.face,c);
-      if(!idx){
-        c='?';
-        idx=ft_.CharIndex(ft_.face,c);
-      }
-      if(previous&&idx){
-        FT_Vector kern{};
-        if(!ft_.Kerning(ft_.face,previous,idx,0,&kern))pen+=static_cast<int>(kern.x/64);
-      }
-      if(ft_.LoadChar(ft_.face,c,FT_LOAD_RENDER))continue;
+    ft_px_=px;
+  }
+  const Renderer::GlyphMetrics& Renderer::metrics(int px,unsigned long code){
+    const auto key=(static_cast<uint64_t>(px)<<32)|static_cast<uint32_t>(code);
+    auto it=glyph_metrics_.find(key);
+    if(it!=glyph_metrics_.end())return it->second;
+    set_pixels(px);
+    GlyphMetrics m;
+    m.code=code;
+    m.idx=ft_.CharIndex(ft_.face,code);
+    if(!m.idx){
+      m.code='?';
+      m.idx=ft_.CharIndex(ft_.face,m.code);
+    }
+    // Bounds come from the same hinted rendered bitmap that drawing uses.
+    if(!ft_.LoadChar(ft_.face,m.code,FT_LOAD_RENDER)){
       auto slot=ft_.face->glyph;
-      auto& b=slot->bitmap;
-      Glyph g{
-        pen+slot->bitmap_left,slot->bitmap_top,static_cast<int>(b.width),static_cast<int>(b.rows),{}
-      };
-      g.pixels.resize(static_cast<size_t>(g.w)*g.h);
-      for(int y=0;y<g.h;++y){
-        int sy=b.pitch>=0?y:g.h-1-y;
-        auto* row=b.buffer+static_cast<ptrdiff_t>(sy)*std::abs(b.pitch);
-        for(int x=0;x<g.w;++x)g.pixels[static_cast<size_t>(y)*g.w+x]=b.pixel_mode==1?((row[x/8]&(0x80>>(x%8)))?255:0):row[x];
+      m.left=slot->bitmap_left;
+      m.top=slot->bitmap_top;
+      m.w=static_cast<int>(slot->bitmap.width);
+      m.h=static_cast<int>(slot->bitmap.rows);
+      m.advance=static_cast<int>(slot->advance.x/64);
+      m.ok=true;
+    }
+    return glyph_metrics_.emplace(key,m).first->second;
+  }
+  // Callers set the pixel size first; FreeType scales kerning by it.
+  int Renderer::kerning(unsigned previous,unsigned idx){
+    if(!previous||!idx)return 0;
+    FT_Vector kern{};
+    return ft_.Kerning(ft_.face,previous,idx,0,&kern)?0:static_cast<int>(kern.x/64);
+  }
+  Renderer::Layout Renderer::layout(const std::string& value,int px){
+    Layout out;
+    unsigned previous=0;
+    set_pixels(px);
+    for(const auto& d:decode_utf8(value,&out.bytes)){
+      const auto& m=metrics(px,d.code);
+      Placed g;
+      g.code=m.code;
+      g.byte=d.byte;
+      if(m.ok){
+        out.pen+=kerning(previous,m.idx);
+        g.x=out.pen+m.left;
+        g.top=m.top;
+        g.w=m.w;
+        g.h=m.h;
+        g.ok=true;
+        out.asc=std::max(out.asc,m.top);
+        out.desc=std::max(out.desc,m.h-m.top);
+        out.min_x=std::min(out.min_x,g.x);
+        out.max_x=std::max(out.max_x,g.x+g.w);
+        out.pen+=m.advance;
+        previous=m.idx;
       }
-      asc=std::max(asc,g.top);
-      desc=std::max(desc,g.h-g.top);
-      pen+=static_cast<int>(slot->advance.x/64);
-      glyphs.push_back(std::move(g));
-      previous=idx;
+      out.glyphs.push_back(g);
     }
-    int min_x=0,max_x=pen;
-    for(auto& g:glyphs){
-      min_x=std::min(min_x,g.x);
-      max_x=std::max(max_x,g.x+g.w);
-    }
-    int w=std::clamp(max_x-min_x+4,1,texture_limit_),h=std::clamp(asc+desc+4,1,texture_limit_);
-    std::vector<unsigned char> rgba(static_cast<size_t>(w)*h*4,0);
-    for(auto& g:glyphs)for(int y=0;y<g.h;++y)for(int x=0;x<g.w;++x){
-      int dx=g.x-min_x+x+2,dy=asc-g.top+y+2;
-      if(dx<0||dx>=w||dy<0||dy>=h)continue;
-      auto to=(static_cast<size_t>(dy)*w+dx)*4;
-      rgba[to]=rgba[to+1]=rgba[to+2]=255;
-      rgba[to+3]=std::max(rgba[to+3],g.pixels[static_cast<size_t>(y)*g.w+x]);
+    out.max_x=std::max(out.max_x,out.pen);
+    return out;
+  }
+  TextTexture Renderer::layout_text(const std::string& value,float logical_size,bool upload_texture){
+    const float scale=density();
+    const int px=pixels(logical_size);
+    auto l=layout(value,px);
+    const int full_w=std::max(1,l.width()),full_h=std::max(1,l.height());
+    // Storage is bounded by the GPU; the measured extent is never clamped, so
+    // fit/ellipsis decisions see true overflow.
+    const int w=std::min(full_w,texture_limit_),h=std::min(full_h,texture_limit_);
+    if(!upload_texture)return {{},w/scale,h/scale,full_w/scale,frame_};
+    set_pixels(px);
+    std::vector<unsigned char> coverage(static_cast<size_t>(w)*h,0);
+    for(const auto& g:l.glyphs){
+      if(!g.ok||!g.w||!g.h)continue;
+      if(ft_.LoadChar(ft_.face,g.code,FT_LOAD_RENDER))continue;
+      auto& b=ft_.face->glyph->bitmap;
+      const int rows=static_cast<int>(b.rows);
+      const int gw=std::min(g.w,static_cast<int>(b.width)),gh=std::min(g.h,rows);
+      for(int y=0;y<gh;++y){
+        const int dy=l.asc-g.top+y+2;
+        if(dy<0||dy>=h)continue;
+        const int sy=b.pitch>=0?y:rows-1-y;
+        auto* row=b.buffer+static_cast<ptrdiff_t>(sy)*std::abs(b.pitch);
+        for(int x=0;x<gw;++x){
+          const int dx=g.x-l.min_x+x+2;
+          if(dx<0||dx>=w)continue;
+          const unsigned char a=b.pixel_mode==1?((row[x/8]&(0x80>>(x%8)))?255:0):row[x];
+          auto to=static_cast<size_t>(dy)*w+dx;
+          coverage[to]=std::max(coverage[to],a);
+        }
+      }
     }
     return {
-      upload(w,h,rgba.data()),w/density,h/density,frame_
+      upload(w,h,coverage.data(),true),w/scale,h/scale,full_w/scale,frame_
     };
   }
+  static std::string text_key(float size,float scale,const std::string& value){
+    return std::to_string(static_cast<int>(size*64))+":"+std::to_string(static_cast<int>(scale*128))+":"+value;
+  }
   float Renderer::width(const std::string& value,float size){
-    std::string key=std::to_string(static_cast<int>(size*64))+":"+std::to_string(static_cast<int>(view_.scale*128))+":"+value;
-    auto it=texts_.find(key);
-    if(it==texts_.end()){
-      auto t=rasterize(value,size);
-      text_bytes_+=t.tex.bytes;
-      it=texts_.emplace(std::move(key),std::move(t)).first;
+    std::string key=text_key(size,view_.scale,value);
+    auto it=widths_.find(key);
+    if(it==widths_.end()){
+      auto drawn=texts_.find(key);
+      const auto measured=drawn==texts_.end()?layout_text(value,size,false).measured_w:drawn->second.measured_w;
+      it=widths_.emplace(std::move(key),std::pair{measured,frame_}).first;
     }
-    it->second.last_use=frame_;
-    return it->second.logical_w;
+    it->second.second=frame_;
+    return it->second.first;
   }
   float Renderer::text(const std::string& value,float x,float y,float size,Color color){
-    width(value,size);
-    std::string key=std::to_string(static_cast<int>(size*64))+":"+std::to_string(static_cast<int>(view_.scale*128))+":"+value;
-    auto& t=texts_.at(key);
+    std::string key=text_key(size,view_.scale,value);
+    auto it=texts_.find(key);
+    if(it==texts_.end()){
+      auto texture=layout_text(value,size,true);
+      text_bytes_+=texture.tex.bytes;
+      it=texts_.emplace(std::move(key),std::move(texture)).first;
+    }
+    auto& t=it->second;
+    t.last_use=frame_;
     quad({
       x,y,t.logical_w,t.logical_h
     },
@@ -401,12 +483,69 @@ void main(){
     return t.logical_w;
   }
   std::string Renderer::ellipsis(const std::string& value,float size,float max){
-    if(width(value,size)<=max)return value;
-    auto s=value;
-    while(!s.empty()&&width(s+"...",size)>max){
-      pop_utf8(s);
+    std::string key=std::to_string(static_cast<int>(max*64))+":"+text_key(size,view_.scale,value);
+    auto cached=ellipses_.find(key);
+    if(cached!=ellipses_.end()){
+      cached->second.second=frame_;
+      return cached->second.first;
     }
-    return s+"...";
+    const float scale=density();
+    const int px=pixels(size);
+    // A candidate must fit both the field and one GPU texture.
+    auto fits=[&](int w){
+      return std::max(1,w)/scale<=max&&w<=texture_limit_;
+    };
+    std::string result;
+    auto l=layout(value,px);
+    if(fits(l.width()))result=value;
+    else{
+      // One layout; each candidate prefix + "..." is evaluated from the
+      // prefix's extents, pen and last glyph plus the dots' own kerning and
+      // bounds. Linear glyph work instead of re-laying out every candidate.
+      const size_t n=l.glyphs.size();
+      std::vector<int> pen(n+1,0),min_x(n+1,0),max_x(n+1,0);
+      std::vector<unsigned> last(n+1,0);
+      for(size_t i=0;i<n;++i){
+        const auto& g=l.glyphs[i];
+        pen[i+1]=pen[i];
+        min_x[i+1]=min_x[i];
+        max_x[i+1]=max_x[i];
+        last[i+1]=last[i];
+        if(!g.ok)continue;
+        const auto& m=metrics(px,g.code);
+        pen[i+1]=g.x-m.left+m.advance;
+        min_x[i+1]=std::min(min_x[i],g.x);
+        max_x[i+1]=std::max(max_x[i],g.x+g.w);
+        last[i+1]=m.idx;
+      }
+      const auto dot=metrics(px,'.');
+      set_pixels(px);
+      const int dot_kern=kerning(dot.idx,dot.idx);
+      std::optional<size_t> keep;
+      for(size_t k=n+1;k-->0;){
+        // Drawing decodes at most 512 code points; the dots must be among them.
+        if(k+3>512)continue;
+        int p=pen[k],lo=min_x[k],hi=max_x[k];
+        if(dot.ok){
+          p+=kerning(last[k],dot.idx);
+          for(int i=0;i<3;++i){
+            if(i)p+=dot_kern;
+            lo=std::min(lo,p+dot.left);
+            hi=std::max(hi,p+dot.left+dot.w);
+            p+=dot.advance;
+          }
+        }
+        hi=std::max(hi,p);
+        if(fits(hi-lo+4)){
+          keep=k;
+          break;
+        }
+      }
+      // As before, an unfittable field still gets a bare "...".
+      result=keep?value.substr(0,*keep<n?l.glyphs[*keep].byte:l.bytes)+"...":"...";
+    }
+    ellipses_.emplace(std::move(key),std::pair{result,frame_});
+    return result;
   }
   void Renderer::line(float x,float y,float x2,float y2,Color c,float thickness){
     x+=offset_x_;

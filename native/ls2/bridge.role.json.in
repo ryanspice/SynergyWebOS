@@ -1,0 +1,11 @@
+{
+  "exeName": "@VERIFIED_BRIDGE_EXECUTABLE@",
+  "type": "regular",
+  "trustLevel": "public",
+  "allowedNames": ["dev.canopy.synergywebos.control"],
+  "permissions": [{
+    "service": "dev.canopy.synergywebos.control",
+    "inbound": ["dev.canopy.synergywebos.ui-control"],
+    "outbound": []
+  }]
+}

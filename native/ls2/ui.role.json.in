@@ -1,0 +1,10 @@
+{
+  "exeName": "@VERIFIED_INSTALLED_UI_EXECUTABLE@",
+  "type": "regular",
+  "allowedNames": ["dev.canopy.synergywebos.ui-control"],
+  "permissions": [{
+    "service": "dev.canopy.synergywebos.ui-control",
+    "inbound": [],
+    "outbound": ["dev.canopy.synergywebos.control"]
+  }]
+}

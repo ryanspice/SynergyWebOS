@@ -2,12 +2,18 @@
 
 ## Host builds
 
-Use `scripts/Build-Desktop.ps1` from Windows/PowerShell; it invokes WSL CMake,
-Ninja and CTest and checks every exit code. PowerShell itself was not available
-in the authoring environment, so that wrapper has not been executed here.
+Use `scripts/Build-Desktop.ps1 -Distribution YOUR_BUILD_DISTRO` from
+Windows/PowerShell; it invokes WSL CMake, Ninja and CTest. Select the distro
+explicitly when your default does not have the build dependencies. Host builds
+require OpenSSL 3 development headers/runtime and the `openssl` CLI in addition
+to CMake, Ninja, Python, SDL2, GLES2, FreeType, json-c and PNG. Xvfb and xauth
+provide headless UI checks. The wrapper creates short private POSIX test paths.
 Equivalent Linux commands, run from `native/`:
 
 ```bash
+fixture_root="$(mktemp -d /tmp/sy041.XXXXXX)"
+trap 'rm -rf -- "$fixture_root"' EXIT
+export SYNERGY_TEST_POSIX_ROOT="$fixture_root" TMPDIR="$fixture_root"
 cmake -S . -B build/desktop -G Ninja -DCMAKE_BUILD_TYPE=Release -DSYNERGY_STRICT=ON
 cmake --build build/desktop --parallel 4
 ctest --test-dir build/desktop --output-on-failure
@@ -16,9 +22,22 @@ cmake --build build/asan --parallel 4
 ctest --test-dir build/asan --output-on-failure
 ```
 
+The private fixture directory is temporary Linux filesystem scratch for Unix
+sockets and 0600 pairing fixtures. Do not put it on a Windows/DrvFS mount or
+retain generated pairing keys in source archives.
+
 Host fallback ABI declarations are retained from Spice Home for environments
 with runtime libraries but no development headers. A target build rejects this
 fallback. Prefer actual SDL/FreeType development headers on local desktops too.
+
+For an explicit size-focused Release candidate, add
+`-DSYNERGY_OPTIMIZE_SIZE=ON`. This enables `-Os`, function/data sections, link
+garbage collection and Release interprocedural optimization after checking the
+selected GNU/Clang toolchain supports it. It stays opt-in until target latency
+and size are measured. Sanitizer builds reject this option. Keep the ordinary
+Release build as the comparison; executable file bytes are not resident memory
+or an IPK size. Preserve unstripped binaries/debug symbols for diagnosis and use
+the selected SDK's strip tool on packaging copies before the stage audit.
 
 For rendered UI checks (Xvfb is optional under working WSLg):
 
@@ -30,6 +49,20 @@ LIBGL_ALWAYS_SOFTWARE=1 MESA_GLES_VERSION_OVERRIDE=2.0 \
 
 No font files are distributed. Set `--font` to an installed readable font only
 when automatic discovery does not match the target's fonts.
+
+Host UI builds with testing enabled now include `synergy-ui-tests` and the
+`native-ui-regressions` CTest entry. It exercises the actual Deck/worker with a
+synthetic Unix broker and instruments real GLES texture uploads. The Python
+wrapper uses Xvfb when installed (otherwise the existing display) and honors
+`TMPDIR` for its disposable fixtures. It requires an installed font; none is
+bundled, and this test is not installed into the TV stage.
+
+For the Windows drvfs checkout, the fix-pass runner lives at
+`.ai/evidence/fix-audit-1111/run-checks.py` in the repository root. Its `release`
+and `asan` modes preserve test-source copies with only fixture paths relocated:
+drvfs cannot supply private POSIX modes or Unix sockets. Retained outputs stay in
+project-local `.ai/`; temporary synthetic `/run/synergy-fix-1111-*` fixtures are
+removed and recorded in storage receipts. No product permission checks are relaxed.
 
 ## Real ARM32 target
 

@@ -38,9 +38,9 @@ namespace spice {
     if(!p)throw std::runtime_error(std::string("Missing runtime symbol: ")+name);
     return p;
   }
-  Sdl::Sdl():lib({
+  Sdl::Sdl(const std::string& runtime_path):lib(runtime_path.empty()?std::vector<std::string>{
     "libSDL2-2.0.so.0","libSDL2.so","SDL2.dll","libSDL2.dylib"
-  }
+  }:std::vector<std::string>{runtime_path}
   ){
 #define LOAD(name) name=lib.get<decltype(name)>("SDL_" #name)
     LOAD(SetMainReady);
@@ -110,7 +110,15 @@ namespace spice {
       if(std::filesystem::is_regular_file(p))return p;
       throw std::runtime_error("SPICE_CPP_FONT does not point to a file");
     }
+    // Fonts are never bundled. A webOS TV ships its own system fonts under
+    // /usr/share/fonts; the names differ per firmware, so try the known
+    // webOS families before the desktop-only locations.
     for(auto* p:{
+      "/usr/share/fonts/LG_Display-Regular.ttf",
+      "/usr/share/fonts/LG_Smart_UI-Regular.ttf",
+      "/usr/share/fonts/DroidSans.ttf",
+      "/usr/share/fonts/font3_helvetica.ttf",
+      "/usr/share/fonts/font4_arial.ttf",
       "C:/Windows/Fonts/segoeui.ttf","/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf","/usr/share/fonts/fonts-go/Go-Regular.ttf","/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf","/usr/share/fonts/LG_Display.ttf","/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf","/System/Library/Fonts/Supplemental/Arial.ttf"
     }
     )if(std::filesystem::is_regular_file(p))return p;

@@ -1,17 +1,21 @@
 # 0.3.4 → native parity and intentional boundaries
 
+This table records the 0.4.0 baseline. The opt-in TLS/controller bridge and
+semantic-key additions are described in [0.4.1 candidate scope](INPUT-0.4.1.md).
+The table's classic-mode limits do not describe that separate bridge transport.
+
 | Area | Native 0.4.0 candidate |
 |---|---|
 | App identity | Same dev.canopy.synergywebos; native main replaces web entrypoint only in an actual target package |
 | Desktop connection | Classic Synergy/Barrier 1.4, manual numeric private/loopback IP, configurable port/name/size |
 | Protocol parsing | Persistent bounded frame buffer; fragmentation across polling intervals supported; malformed lengths/TLS refused |
-| Keyboard/mouse | Keys down/up/repeat, five buttons, absolute packets converted to relative deltas, relative packets, wheel remainder |
+| Keyboard/mouse | Keys down/up/repeat, five buttons, absolute pointer backend with entry synchronization and clamped relative-packet accumulation, wheel remainder |
 | Modifier entry | Shift/Ctrl/Alt mask inherited and reconciled with physical L/R events |
 | Key cleanup | Leave, close, exception/disconnect and Stop release held native keys/buttons |
 | Meta/Home | Both Meta keys consumed; system/off and 0–5000 ms hold; no repeat firing |
 | Alt/Home | Ordinary Alt input plus five-second hold; release before Home action |
 | Alt+Tab | Tab consumed during Alt; Shift reverses; pending Alt-Home canceled; running-app cache refreshed |
-| Cursor | Relative uinput; optional one-pixel keepalive off by default; not absolute Magic Remote calibration |
+| Cursor | Absolute uinput X/Y using configured screen bounds; automatic device discovery; optional keepalive off by default. Full-range movement and smooth handoff accepted in the recorded Twitch session. |
 | UI | Native raw-GLES2 Connection/Input/Handoff/Diagnostics, D-pad, pointer, physical and on-screen text editing |
 | Root | Separate daemon + explicit provisioner, not accidental elevation of the UI |
 | Persistence | Private atomic native config; active-session configuration separate from saved next-session config |

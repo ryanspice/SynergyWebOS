@@ -1,0 +1,4 @@
+[D-BUS Service]
+Name=dev.canopy.synergywebos.control
+Exec=@VERIFIED_BRIDGE_EXECUTABLE@
+Type=static

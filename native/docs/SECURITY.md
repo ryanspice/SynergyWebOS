@@ -1,46 +1,80 @@
 # Native security boundaries
 
-This is a developer candidate, not a security-reviewed production root service.
+This is a developer candidate for an already rooted TV. Source, automated tests
+and one firmware's 0.4.0 execution evidence do not establish a production security
+review or 0.4.1 hardware acceptance.
 
-The input daemon runs separately from the UI. It exposes only a bounded Unix
-socket protocol; there is no HTTP/WebSocket/TCP management listener, shell
-command string, arbitrary executable selection, or network-supplied file path.
-The client makes an outbound classic Synergy connection. TLS is not implemented.
-A malicious accepted server can issue input, so use a trusted isolated LAN only.
+## Network input and pairing
 
-Control authenticates kernel `SO_PEERCRED`: root or one explicitly configured
-controller UID. **It does not authenticate webOS application identity.** When
-multiple installed apps share that UID, they share this control authority.
-The provisioner requires acknowledgment of this boundary. The socket is mode
-0666 inside an immutable-to-controller directory so the authorized app UID can
-reach it; credentials are checked before request bytes are read. Never interpret
-that as app-level isolation. A compromised controller UID can configure/start
-input and request the narrow supported TV actions.
+The TV daemon initiates its connection. It has no TCP management listener,
+arbitrary executable selector or network-supplied file path. An accepted input
+server can issue keyboard/mouse and, in bridge mode, controller events. Trust
+that server and use an isolated private network.
 
-On a real TV, jail filesystem reachability and UID assignment are unresolved
-acceptance gates. Do not weaken confinement. Use a narrow authenticated LS2
-bridge later only if measured platform behavior requires it. This implementation
-does not add such a bridge or use Homebrew's arbitrary exec API from the UI.
+Direct classic Synergy 1.4 is plaintext and requires explicit consent. Optional
+`input_bridge` mode uses OpenSSL 3 mutual TLS, minimum TLS 1.2, with a configured
+CA and expected server identity. The companion also validates the client CA and
+an explicit SHA-256 fingerprint of the TV certificate before opening the
+loopback-only upstream Synergy connection. There is no TLS-to-plaintext fallback.
+This is our bridge protocol, not proprietary Synergy TLS support.
 
-The explicitly provisioned daemon/launcher/runtime copy is root-owned and not
-writable by the controller. Startup is not automatically enabled. Legacy files
-and hooks are never replaced. Provision only reviewed stage bytes. No exploit,
-rooting procedure, modprobe, mknod or blanket chmod is part of the rebuild.
+On the TV, pairing PEMs must be regular files, mode 0600, owned by the daemon
+user. Checked descriptors supply the bytes used for parsing; private key memory
+is cleansed after loading. Keep pairing material out of source, IPKs, companion
+archives and reports. No global certificate-store installation is required.
+Certificate generation, rotation, revocation and physical pairing acceptance
+remain explicit operator responsibilities. See the
+[companion guide](../../desktop/input-bridge/README.md).
 
-Input uses actual Linux headers/ioctl structs and RAII device lifetime. Desktop
-builds reject real input even as UID 0. Native input is released on capture loss,
-connection failure and normal stop. Power loss/SIGKILL cannot execute software
-cleanup; destroying the process closes its virtual devices, but the compositor's
-response still needs a physical-TV test.
+## Local control and privilege
 
-I/O has bounded frames, buffers, operation deadlines and reconnect backoff.
-Partial Synergy packets survive polling gaps. Local state uses private files,
-symlink refusal and atomic replacement; malformed configuration is preserved and
-reported. System Home/app launch calls use an absolute program path, fixed Luna
-methods, literal argv, a clean environment, bounded output and a process-group
-timeout. A successful Luna response is not proof of a visible TV action.
+The Unix broker checks kernel `SO_PEERCRED` before request bytes: root or one
+explicitly configured controller UID. This authenticates a UID, not an app.
+Apps sharing that UID share broker authority if they can reach the socket.
+The provisioner acknowledges that boundary. The socket is mode 0666 inside a
+protected directory; the peer check, not the mode alone, controls admission.
 
-Not yet established: fuzz coverage beyond the supplied deterministic malformed
-cases, target ABI/uinput behavior, app-level IPC authorization, firmware-specific
-Luna permissions, clipboard, TLS/certificate pinning, non-US keyboard layouts,
-absolute pointer synchronization, sleep/wake and long-running TV stability.
+The optional separate root LS2 helper denies every caller by default. Enabling
+`--verified-executable-role` is appropriate only after the effective hub role
+binds the exact secondary UI service name exclusively to the protected installed
+UI executable and an unrelated executable is rejected. Payload app IDs, sender
+prefixes and shared UIDs do not establish identity. `--allow-input-control`
+separately enables the bounded configure/start/restart/stop/profile-save set.
+Read operations and mutation operations both retain broker schema validation.
+There is no generic execution, arbitrary app-launch or boot-edit API.
+
+The helper uses a bounded asynchronous scheduler with reserved Stop capacity.
+It is excluded from the ordinary IPK and requires separate protected provisioning.
+The [LS2 guide](../ls2/README.md) describes templates and firmware-specific
+permissions. Preserve all unrelated effective permissions and manifest entries;
+never disable confinement or restart the system bus to make admission succeed.
+Normal jailed rendering and read-only status worked on the recorded 0.4.0 TV;
+all mutation and lifecycle paths need their own acceptance.
+
+## Lifecycle and resource bounds
+
+The installed daemon/launcher/runtime must be root-owned and unwritable by the
+controller. Startup is not enabled automatically. The project supplies no exploit,
+modprobe, mknod, blanket chmod or automatic legacy-hook replacement.
+
+Input uses Linux headers/ioctl structures and RAII device ownership. Host builds
+refuse real input even as root. Capture loss, Stop, disconnect and errors release
+held input. Controller frames additionally check capture generation, sequence,
+freshness and a watchdog independent of deferred shortcut handling. Queues,
+frames, ingress, output, operation deadlines and reconnect backoff are bounded.
+
+Power loss or SIGKILL cannot run cleanup code. Closing virtual-device descriptors
+and compositor behavior still need physical acceptance. Forwarding XInput does
+not hide the PC controller; other PC applications may continue to receive it.
+
+Local state uses private files, symlink refusal and atomic replacement. Malformed
+configuration is preserved and reported. Bounded Home/app-switch operations use
+an absolute executable path, fixed Luna methods, literal arguments, a clean
+environment and a process-group deadline. Successful replies or writes do not
+prove a visible TV action.
+
+Remaining gates include complete target ABI/load evidence, physical pairing and
+controller/media behavior, PC exclusivity, sleep/wake, cold boot/autostart and
+long-running stability. Deterministic malformed-frame tests are not exhaustive
+fuzzing. See [candidate verification](INPUT-0.4.1.md) and the
+[dated TV execution summary](TV-EXECUTION.md).

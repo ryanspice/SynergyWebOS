@@ -4,6 +4,8 @@
 #include <cstddef>
 #include <map>
 #include <memory>
+#include <string>
+#include <vector>
 namespace spice {
 #ifdef _WIN32
 #define SPICE_GL_CALL __stdcall
@@ -82,7 +84,9 @@ namespace spice {
   };
   struct TextTexture {
     Texture tex;
-    float logical_w=0,logical_h=0;
+    // logical_w/h describe the stored texture (clamped to the GPU limit);
+    // measured_w is the full layout width, used for fit/ellipsis decisions.
+    float logical_w=0,logical_h=0,measured_w=0;
     uint64_t last_use=0;
   };
   class Renderer {
@@ -93,15 +97,45 @@ namespace spice {
     GLint mode_=0,color_=0,color2_=0,size_=0,radius_=0,border_=0,aa_=0;
     std::map<std::string,Texture> images_;
     std::map<std::string,TextTexture> texts_;
+    std::map<std::string,std::pair<float,uint64_t>> widths_;
+    std::map<std::string,std::pair<std::string,uint64_t>> ellipses_;
+    // Hinted glyph bounds per (pixel size, code point): one FreeType load each.
+    struct GlyphMetrics {
+      unsigned long code=0;
+      unsigned idx=0;
+      int left=0,top=0,w=0,h=0,advance=0;
+      bool ok=false;
+    };
+    std::map<uint64_t,GlyphMetrics> glyph_metrics_;
+    struct Placed {
+      unsigned long code=0;
+      int x=0,top=0,w=0,h=0;
+      bool ok=false;
+      size_t byte=0;
+    };
+    struct Layout {
+      std::vector<Placed> glyphs;
+      int pen=0,min_x=0,max_x=0,asc=0,desc=0;
+      size_t bytes=0;
+      int width()const{return max_x-min_x+4;}
+      int height()const{return asc+desc+4;}
+    };
+    int ft_px_=0;
     uint64_t frame_=0;
     size_t text_bytes_=0,image_bytes_=0;
     int texture_limit_=2048;
     Viewport view_;
     float offset_x_=0,offset_y_=0,opacity_=1;
     GLuint compile(GLenum type,const std::string& src);
-    Texture upload(int w,int h,const unsigned char* bytes);
+    Texture upload(int w,int h,const unsigned char* bytes,bool alpha=false);
     Texture png(const std::filesystem::path& path);
-    TextTexture rasterize(const std::string& text,float size);
+    float density()const;
+    int pixels(float logical_size)const;
+    void set_pixels(int px);
+    const GlyphMetrics& metrics(int px,unsigned long code);
+    int kerning(unsigned previous,unsigned idx);
+    Layout layout(const std::string& text,int px);
+    TextTexture layout_text(const std::string& text,float size,bool upload_texture);
     void quad(Rect rect,int mode,Color color,Color color2,float radius,float border,GLuint texture,const std::array<float,4>& uv={
       0,0,1,1
     }

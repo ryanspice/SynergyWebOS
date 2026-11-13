@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import socket
+import signal
 import struct
 import subprocess
 import sys
@@ -186,6 +187,15 @@ except (ConnectionResetError,BrokenPipeError):sys.exit(0)
                 check(unauthorized.returncode == 0, "kernel peer credentials reject other UID")
             result = subprocess.run([CTL, "--runtime-dir", temp, "snapshot"], capture_output=True, text=True, timeout=3)
             check(result.returncode == 0 and all(x in result.stdout for x in ("===STATE===", "===AUTOSTART===", "===CONFIG===", "===LOG===")), "legacy-compatible snapshot markers")
+            # Observe the main broker thread while no client is running. Its
+            # old 25 ms timeout caused repeated voluntary context switches.
+            def broker_switches():
+                text = Path(f"/proc/{daemon.pid}/status").read_text()
+                return int(next(line.split(":", 1)[1] for line in text.splitlines() if line.startswith("voluntary_ctxt_switches:")))
+            time.sleep(0.05)
+            before = broker_switches()
+            time.sleep(0.3)
+            check(broker_switches() - before <= 2, "idle daemon broker blocks without periodic wakeups")
         finally:
             daemon.terminate()
             stdout, stderr = daemon.communicate(timeout=5)
@@ -200,8 +210,9 @@ except (ConnectionResetError,BrokenPipeError):sys.exit(0)
             check(not rpc(root, "configure", config=config)["ok"], "malformed config requires explicit repair")
             check((root / "config.json").read_bytes() == original, "malformed original preserved")
         finally:
-            daemon.terminate()
+            daemon.send_signal(signal.SIGINT)
             daemon.communicate(timeout=5)
+            check(daemon.returncode == 0, "blocked idle broker wakes for SIGINT")
     print(f"PASS: {checks} process/TCP/IPC assertions; actual daemon + CLI; no TV input")
 
 if __name__ == "__main__":

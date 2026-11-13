@@ -73,9 +73,11 @@ namespace synergy {
                 break;
             }
             pollfd fd{
-                pipes[0],POLLIN|POLLHUP,0
+                eof?-1:pipes[0],POLLIN|POLLHUP,0
             }
             ;
+            // POLLHUP remains ready forever. After EOF, poll only as a bounded
+            // wait for child exit; keep checking waitpid and the same deadline.
             int wait=std::min(20,static_cast<int>(std::chrono::duration_cast<std::chrono::milliseconds>(deadline-now).count()));
             int polled=poll(&fd,1,std::max(1,wait));
             if(polled<0&&errno!=EINTR){

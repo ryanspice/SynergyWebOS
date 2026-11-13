@@ -1,6 +1,9 @@
 #include "spice/render.hpp"
 #include "synergy/ipc.hpp"
 #include "synergy/protocol.hpp"
+#ifdef SYNERGY_USE_LS2
+#include "synergy/ls2_transport.hpp"
+#endif
 #include <unistd.h>
 #include <atomic>
 #include <chrono>
@@ -18,40 +21,91 @@ namespace synergy {
         const auto Ink=Color::hex("#070b10"), Panel=Color::hex("#0d141b"), Raised=Color::hex("#111a23");
         const auto Text=Color::hex("#f2f7fa"), Muted=Color::hex("#8fa3b3"), Amber=Color::hex("#ffb35c"), Teal=Color::hex("#56d9c3");
         const auto Line=Color::hex("#1d2a35"), Danger=Color::hex("#ff7a7a");
+        constexpr Uint32 ControlReadyEvent=0x8000; // SDL_USEREVENT; private to this app.
         // The renderer never waits on a socket. Requests and results are bounded, owned queues.
         class ControlWorker {
             std::filesystem::path root_;
             std::mutex mutex_;
             std::condition_variable cv_;
-            std::deque<std::pair<std::string,Json>> work_, results_;
-            bool stop_=false;
+            struct Job { std::string tag; Json request; uint64_t epoch; };
+            std::deque<Job> work_;
+            std::deque<std::pair<std::string,Json>> results_;
+            bool stop_=false,stop_pending_=false;
+            uint64_t epoch_=0;
+            std::function<void()> wake_;
+            std::function<Json(const Json&,int)> transport_;
             std::thread thread_;
+            Json send(const Json& job,int timeout){
+                return transport_?transport_(job,timeout):request(root_,job,timeout);
+            }
+            void result_locked(const std::string& tag,Json result) {
+                if(tag=="status"||tag=="stop"){
+                    const auto prior=std::find_if(results_.begin(),results_.end(),[&](const auto& r){return r.first==tag;});
+                    if(prior!=results_.end())results_.erase(prior);
+                }
+                if(results_.size()==16){
+                    const auto oldest=std::find_if(results_.begin(),results_.end(),[](const auto& r){return r.first!="status"&&r.first!="stop";});
+                    results_.erase(oldest); // at most two coalesced protected results
+                }
+                results_.emplace_back(tag,std::move(result));
+            }
             void run() {
                 for (;;) {
-                    std::pair<std::string,Json> job;
+                    Job job;
                     {
                         std::unique_lock lock(mutex_);
                         cv_.wait(lock,[&]{
-                            return stop_||!work_.empty();}
+                            return stop_||stop_pending_||!work_.empty();}
                         );
                         if(stop_)return;
-                        job=std::move(work_.front());
-                        work_.pop_front();
+                        if(stop_pending_){
+                            stop_pending_=false;
+                            auto request=Json::object();
+                            request.set("op",Json::string("stop"));
+                            job={"stop",std::move(request),epoch_};
+                        }
+                        else {
+                            job=std::move(work_.front());
+                            work_.pop_front();
+                        }
                     }
                     Json result;
                     try {
-                        result=request(root_,job.second,1200);
+                        result=send(job.request,1200);
+                        // One FIFO work item owns both operations. Later saves cannot
+                        // replace the configuration before this start is submitted.
+                        if(job.tag=="configure-start"&&result.get("ok").flag()){
+                            bool cancelled;
+                            {
+                                std::lock_guard lock(mutex_);
+                                cancelled=stop_||job.epoch!=epoch_;
+                            }
+                            if(cancelled)result=failure("Configuration saved; connection start cancelled by Stop.");
+                            else {
+                                auto start=Json::object();
+                                start.set("op",Json::string("start"));
+                                try{
+                                    result=send(start,1200);
+                                }
+                                catch(const std::exception& e){
+                                    result=failure(e.what());
+                                }
+                                if(!result.get("ok").flag())result=failure("Configuration saved, but connection start failed: "+result.get("error").str("Daemon request failed"));
+                            }
+                        }
                     }
                     catch(const std::exception& e) {
                         result=failure(e.what());
                     }
-                    std::lock_guard lock(mutex_);
-                    if(results_.size()==16)results_.pop_front();
-                    results_.emplace_back(job.first,std::move(result));
+                    {
+                        std::lock_guard lock(mutex_);
+                        result_locked(job.tag,std::move(result));
+                    }
+                    if(wake_)wake_();
                 }
             }
             public:
-            explicit ControlWorker(std::filesystem::path root):root_(std::move(root)),thread_(&ControlWorker::run,this){
+            explicit ControlWorker(std::filesystem::path root,std::function<void()> wake={},std::function<Json(const Json&,int)> transport={}):root_(std::move(root)),wake_(std::move(wake)),transport_(std::move(transport)),thread_(&ControlWorker::run,this){
             }
             ~ControlWorker() {
                 {
@@ -63,10 +117,28 @@ namespace synergy {
                 thread_.join();
             }
             bool post(const std::string& tag,Json job) {
-                std::lock_guard lock(mutex_);
-                if(work_.size()>=8)return false;
-                work_.emplace_back(tag,std::move(job));
+                {
+                    std::lock_guard lock(mutex_);
+                    if(stop_)return false;
+                    if(tag=="stop"){
+                        ++epoch_;
+                        stop_pending_=true;
+                        for(auto it=work_.begin();it!=work_.end();){
+                            const auto op=it->request.get("op").str();
+                            if(it->tag=="configure-start"||op=="start"||op=="restart"){
+                                result_locked(it->tag,failure("Connection start cancelled by Stop."));
+                                it=work_.erase(it);
+                            }
+                            else ++it;
+                        }
+                    }
+                    else {
+                        if(work_.size()>=8)return false;
+                        work_.push_back({tag,std::move(job),epoch_});
+                    }
+                }
                 cv_.notify_one();
+                if(tag=="stop"&&wake_)wake_();
                 return true;
             }
             std::deque<std::pair<std::string,Json>> take() {
@@ -88,7 +160,7 @@ namespace synergy {
             spice::Sdl& sdl_;
             std::vector<Button> buttons_;
             std::string focus_="tab-link", editing_, edit_text_, old_focus_;
-            bool uppercase_=false, loaded_=false, pending_start_=false, status_pending_=false, schema_warned_=false;
+            bool uppercase_=false, loaded_=false, status_pending_=false, schema_warned_=false;
             int64_t refresh_=0;
             Json status_,probe_;
             Config config_;
@@ -143,8 +215,7 @@ namespace synergy {
                     auto j=Json::object();
                     j.set("op",Json::string("configure"));
                     j.set("config",config_.json());
-                    pending_start_=start;
-                    if(!post("configure",j))pending_start_=false;
+                    post(start?"configure-start":"configure",j);
                 }
                 catch(const std::exception& e){
                     say(e.what(),true);
@@ -177,14 +248,28 @@ namespace synergy {
             }
             public:
             bool quit=false;
+            void visible(bool active) {
+                if(active)refresh_=0;
+            }
+            int wait_ms(bool active)const {
+                if(!active||status_pending_)return -1;
+                return static_cast<int>(std::clamp<int64_t>(refresh_-monotonic_ms(),0,2000));
+            }
             explicit Deck(ControlWorker& w,spice::Sdl& s,std::string view):worker_(w),sdl_(s),page_(std::move(view)) {
                 focus_="tab-"+page_;
             }
-            void update() {
+            // Returns whether anything drawn may have changed.
+            bool update(bool active=true) {
+                bool changed=false;
                 for(auto& [tag,result]:worker_.take()) {
-                    if(tag=="status")status_pending_=false;
+                    if(tag=="status"){
+                        status_pending_=false;
+                        // A periodic refresh identical to the shown status changes nothing.
+                        if(loaded_&&result.get("ok").flag()&&result.dump()==status_.dump())continue;
+                        if(!result.get("ok").flag()&&error_&&notice_==result.get("error").str("Daemon request failed"))continue;
+                    }
+                    changed=true;
                     if(!result.get("ok").flag()) {
-                        if(tag=="configure")pending_start_=false;
                         say(result.get("error").str("Daemon request failed"),true);
                         continue;
                     }
@@ -210,11 +295,8 @@ namespace synergy {
                     }
                     else if(tag=="configure") {
                         say("Configuration saved; a running connection keeps its active settings.");
-                        if(pending_start_){
-                            pending_start_=false;
-                            command("start");
-                        }
                     }
+                    else if(tag=="configure-start")say("Configuration saved; start accepted. Check status for the connection result.");
                     else if(tag=="profile-load") {
                         auto p=result.get("profile");
                         corner_=p.get("corner").str("bottom-right");
@@ -225,12 +307,14 @@ namespace synergy {
                     else if(tag=="profile-save")say("Handoff reference saved locally. Apply server-side settings separately.");
                     else say("Request accepted: "+tag+". Check status for its result.");
                 }
-                if(monotonic_ms()>=refresh_&&!status_pending_) {
+                if(active&&monotonic_ms()>=refresh_&&!status_pending_) {
                     auto j=Json::object();
                     j.set("op",Json::string("status"));
                     status_pending_=post("status",j);
+                    if(!status_pending_)changed=true; // queue-full notice
                     refresh_=monotonic_ms()+2000;
                 }
+                return changed;
             }
             void activate(const std::string& id) {
                 if(id.rfind("char-",0)==0) {
@@ -358,12 +442,15 @@ namespace synergy {
                 if(editing_.empty())return;
                 for(unsigned char c:t)if(c>=32&&c<127&&edit_text_.size()<64)edit_text_+=static_cast<char>(c);
             }
-            void pointer(spice::Point point,bool click) {
+            // Returns whether focus or state may have changed.
+            bool pointer(spice::Point point,bool click) {
                 for(const auto& b:buttons_)if(b.rect.contains(point)){
+                    const bool moved=focus_!=b.id;
                     focus_=b.id;
                     if(click)activate(b.id);
-                    break;
+                    return moved||click;
                 }
+                return false;
             }
             Json report()const {
                 auto j=Json::object();
@@ -630,7 +717,14 @@ namespace synergy {
             qa=Json::parse(text,65536);
             if(!qa.is(json_type_array)||qa.size()>100)throw std::runtime_error("Invalid QA events");
         }
+#ifdef SYNERGY_WEBOS
+        // The jail puts /usr/lib first; pin the compatible packaged SDL rather
+        // than silently loading the firmware's older SDL with the same SONAME.
+        if(setenv("APPID",AppId,1)!=0)throw std::runtime_error("Cannot set native SDL app identity");
+        spice::Sdl sdl(std::string("/media/developer/apps/usr/palm/applications/")+AppId+"/lib/libSDL2-2.0.so.0");
+#else
         spice::Sdl sdl;
+#endif
         Window window(sdl);
         sdl.SetMainReady();
         if(sdl.Init(SDL_INIT_VIDEO)!=0)throw std::runtime_error(sdl.GetError());
@@ -649,9 +743,17 @@ namespace synergy {
         }
         );
         if(!renderer.is_es)throw std::runtime_error("OpenGL ES context required");
-        ControlWorker worker(root);
+        std::function<Json(const Json&,int)> control_transport;
+#ifdef SYNERGY_USE_LS2
+        control_transport=[](const Json& job,int timeout){return ls2_request(job,timeout);};
+#endif
+        ControlWorker worker(root,[&]{
+            SDL_Event event{};
+            event.type=ControlReadyEvent;
+            sdl.PushEvent(&event);
+        },std::move(control_transport));
         Deck deck(worker,sdl,view);
-        bool active=true;
+        bool active=true,dirty=true;
         int rendered=0;
         std::cout<<"SynergyWebOS native "<<SYNERGY_VERSION<<"; UI UID="<<geteuid()<<"; "<<renderer.renderer<<'\n';
         auto viewport=[&]{
@@ -697,28 +799,41 @@ namespace synergy {
             auto handle=[&](const SDL_Event& e){
                 if(e.type==SDL_QUIT)deck.quit=true;
                 else if(e.type==SDL_WINDOWEVENT) {
+                    const bool was_active=active;
                     auto code=e.window.event;
                     if(code==SDL_WINDOWEVENT_CLOSE)deck.quit=true;
                     if(code==SDL_WINDOWEVENT_HIDDEN||code==SDL_WINDOWEVENT_MINIMIZED||code==SDL_WINDOWEVENT_FOCUS_LOST)active=false;
                     if(code==SDL_WINDOWEVENT_SHOWN||code==SDL_WINDOWEVENT_RESTORED||code==SDL_WINDOWEVENT_FOCUS_GAINED)active=true;
+                    if(active!=was_active)deck.visible(active);
                     if(code==SDL_WINDOWEVENT_RESIZED||code==SDL_WINDOWEVENT_SIZE_CHANGED)geometry=viewport();
+                    // Expose, resize, show/resume and focus changes all repaint.
+                    dirty=true;
                 }
-                else if(e.type==SDL_KEYDOWN)deck.key(static_cast<int>(e.key.keysym.scancode),e.key.keysym.sym,e.key.repeat!=0,sdl.GetScancodeName(e.key.keysym.scancode));
-                else if(e.type==SDL_TEXTINPUT)deck.text(e.text.text);
+                else if(e.type==SDL_KEYDOWN){
+                    deck.key(static_cast<int>(e.key.keysym.scancode),e.key.keysym.sym,e.key.repeat!=0,sdl.GetScancodeName(e.key.keysym.scancode));
+                    dirty=true;
+                }
+                else if(e.type==SDL_TEXTINPUT){
+                    deck.text(e.text.text);
+                    dirty=true;
+                }
                 else if(e.type==SDL_MOUSEMOTION&&(e.motion.xrel||e.motion.yrel)){
-                    if(auto p=geometry.pointer(static_cast<float>(e.motion.x),static_cast<float>(e.motion.y)))deck.pointer(*p,false);
+                    if(auto p=geometry.pointer(static_cast<float>(e.motion.x),static_cast<float>(e.motion.y)))dirty|=deck.pointer(*p,false);
                 }
                 else if(e.type==SDL_MOUSEBUTTONDOWN&&e.button.button==1){
-                    if(auto p=geometry.pointer(static_cast<float>(e.button.x),static_cast<float>(e.button.y)))deck.pointer(*p,true);
+                    if(auto p=geometry.pointer(static_cast<float>(e.button.x),static_cast<float>(e.button.y)))dirty|=deck.pointer(*p,true);
                 }
             }
             ;
-            if(!active&&frames==0){
-                if(sdl.WaitEventTimeout(&event,100))handle(event);
+            // Results push a user event. Only visible status refresh has a timer;
+            // hidden windows sleep until input, results or a window event arrives.
+            if(frames==0&&(!active||!dirty)){
+                if(sdl.WaitEventTimeout(&event,deck.wait_ms(active)))handle(event);
             }
             while(sdl.PollEvent(&event))handle(event);
-            deck.update();
-            if(active||frames>0) {
+            dirty|=deck.update(active);
+            if(frames>0||(active&&dirty)) {
+                dirty=false;
                 renderer.begin(geometry);
                 deck.draw(renderer);
                 renderer.end();
@@ -728,8 +843,9 @@ namespace synergy {
                     deck.quit=true;
                 }
                 sdl.GL_SwapWindow(window.window);
+                // Pace only frames that were actually drawn.
+                if(sdl.GL_GetSwapInterval()==0)std::this_thread::sleep_until(began+std::chrono::milliseconds(16));
             }
-            std::this_thread::sleep_until(began+std::chrono::milliseconds(16));
         }
         if(!report_path.empty()){
             std::ofstream out(report_path);

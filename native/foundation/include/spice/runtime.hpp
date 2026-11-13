@@ -48,7 +48,7 @@ namespace spice {
     void(*GameControllerClose)(SDL_GameController*);
     SDL_Joystick*(*GameControllerGetJoystick)(SDL_GameController*);
     SDL_JoystickID(*JoystickInstanceID)(SDL_Joystick*);
-    Sdl();
+    explicit Sdl(const std::string& runtime_path={});
   };
   struct FreeType {
     Library lib;
