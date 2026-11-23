@@ -257,3 +257,43 @@ Recovery copies preserve the complete pre-existing dirty bytes under
 current destination to an expected hash. No ARM/IPK, real server, TV/uinput/Luna,
 UID/jail, provisioning, boot, sleep/wake or human acceptance was performed.
 No commit, push, deployment or publication occurred.
+
+## Focused protocol/input/UI/TLS re-review - November 23, 2026
+
+A read-only re-review of `native/src/protocol.cpp`, `input.cpp`, `ui.cpp` and
+`tls.cpp`, their headers, and the related client/ipc/daemon/platform/config/
+render paths checked the current source against the November 11 and November 12
+audit rounds. **All ten prior findings remain fixed and no new correctness,
+security or resource-exhaustion defect was found.** The older HANDOFF note that
+reserved Stop capacity was open is historical: the current `ControlWorker`
+implements reserved Stop priority, coalescing, queued-start cancellation and
+epoch-based in-flight start invalidation.
+
+That review was static source inspection only - no build, test or runtime probe
+was run in it, and no TV or target hardware was involved.
+
+### Low observations (not defects)
+
+- `FrameDecoder::feed()` (`protocol.cpp:62`) uses a 2 MiB budget as a
+  synchronous test convenience; the Client's `consume()` (`client.cpp:248`)
+  uses 256 KiB. Future `feed()` callers should know the larger budget.
+- Unknown Synergy commands disconnect (`protocol.cpp:644`); this fail-closed
+  behavior is intentional.
+- UI text input is ASCII-only (`ui.cpp:443`); a known limitation.
+- UI status comparison uses JSON dump string equality (`ui.cpp:268`); the
+  daemon emits deterministic JSON, so this can only cause a redundant redraw.
+
+### Verification gaps (recorded, not defects)
+
+| Gap | Scope | Status |
+|---|---|---|
+| G1: no automated TLS test for certificate load/chain verification, hostname/IP matching, SNI, handshake, and WANT_READ/WANT_WRITE | `native/src/tls.cpp` | OPEN - follow-up gate |
+| G2: UI sanitizer build not run (sanitizer config disables UI) | `native/tests/ui_regressions.cpp` | OPEN - needs Xvfb + Mesa fixture |
+| G3: target EOF CPU unmeasured (host ~0.001 s CPU over a 0.4 s wait) | `platform.cpp` | PENDING target |
+| G4: 4K text GPU cost unmeasured; host pixel equivalence passed | `render.cpp` | PENDING target |
+| G5: no explicit test of incremental ingress budget near 256 KiB | `client.cpp`, `client_regressions.cpp` | OPEN - low risk |
+
+Host conclusions come from source inspection plus the existing host evidence;
+target GPU, scheduler and physical-input behavior remain speculative until
+measured. The review thread is settled. These gaps are follow-up work, not
+blockers for the v0.4.2 bridge stabilization.
