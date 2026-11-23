@@ -131,9 +131,16 @@ struct PadSample {
     std::int64_t captured{};
 };
 
-// A connection change, an explicit neutral/disconnected state, or a released
-// button is safety-relevant: the TV uses these to undo held controls.  Such a
-// sample must not be coalesced away by a newer analog-only sample.
+// Raised by the coalescer when a per-slot event queue is full.  The relay
+// translates this into a categorized reason instead of silently dropping a
+// release or a connection transition.
+class PadQueueOverflow : public std::runtime_error {
+public:
+    PadQueueOverflow() : std::runtime_error("Controller event queue budget exceeded") {}
+};
+
+// Safety-relevant for cross-slot ordering and stale-event pruning: a release,
+// a disconnect or a neutral state undoes held controls on the TV.
 inline bool is_authoritative(const GamepadState& next, const GamepadState& previous) {
     if (next.connected != previous.connected) return true;
     if (!next.connected) return true;
@@ -141,64 +148,104 @@ inline bool is_authoritative(const GamepadState& next, const GamepadState& previ
     return false;
 }
 
-// Coalesces controller updates that have not started transmission.  The newest
-// state per slot wins, except that an already queued authoritative release or
-// disconnect survives until it is transmitted.  Sequence numbers are assigned
-// by the caller only when a sample actually starts transmission, so dropped
-// samples never leave gaps or replay stale input.
+struct PendingPad {
+    PadSample sample;
+    bool discrete;
+};
+
+// Bounded per-slot FIFO of controller transitions.  Discrete edges (button
+// press/release, connect/disconnect, trigger zero crossings and stick
+// neutralization) are determined against the last *observed* state and are
+// kept in order.  Only consecutive pending analog-only snapshots for the same
+// slot and capture generation are coalesced into the newest one.
 class PadCoalescer {
 public:
-    std::array<std::optional<PadSample>, Slots> pending{};
-    std::array<GamepadState, Slots> last_sent{};
+    static constexpr std::size_t MaxPendingPerSlot = 256;
+    // A press delayed longer than this must not be replayed merely to drain a
+    // queue.  Safety edges (releases/neutrals) are never pruned by age.
+    static constexpr std::int64_t StaleEventMs = 500;
+
+    std::array<std::deque<PendingPad>, Slots> pending{};
+    std::array<GamepadState, Slots> last_sent{}, last_observed{};
+    std::array<bool, Slots> have_observed{};
     bool initialized = false;
+    std::size_t dropped_stale = 0;
+
+    static bool neutral_sticks(const GamepadState& s) {
+        return s.lx == 0 && s.ly == 0 && s.rx == 0 && s.ry == 0;
+    }
+
+    static bool is_discrete_change(const GamepadState& a, const GamepadState& b) {
+        return a.connected != b.connected || a.buttons != b.buttons ||
+            ((a.lt == 0) != (b.lt == 0)) ||
+            ((a.rt == 0) != (b.rt == 0)) ||
+            (!neutral_sticks(a) && neutral_sticks(b));
+    }
 
     // Focus loss clears only unsent state.  A write already handed to OpenSSL
     // is held by the caller and must remain stable until it completes.
     void focus_lost() {
-        pending.fill(std::nullopt);
+        for (auto& queue : pending) queue.clear();
         last_sent.fill({});
+        last_observed.fill({});
+        have_observed.fill(false);
         initialized = false;
     }
 
     void observe(std::uint8_t slot, std::uint32_t capture, const GamepadState& state,
                  std::int64_t now) {
         if (slot >= Slots) return;
-        if (!initialized) {
-            last_sent.fill({});
-            initialized = true;
-        }
-        PadSample fresh{slot, capture, state, now};
-        auto& queued = pending[slot];
-        if (!queued.has_value()) {
-            queued = fresh;
+        const bool discrete = !have_observed[slot] ||
+            is_discrete_change(last_observed[slot], state);
+        have_observed[slot] = true;
+        initialized = true;
+        last_observed[slot] = state;
+        const PadSample fresh{slot, capture, state, now};
+        auto& queue = pending[slot];
+        if (!discrete && !queue.empty() && !queue.back().discrete &&
+            queue.back().sample.capture == capture) {
+            queue.back().sample = fresh;  // coalesce analog only, never a discrete edge
             return;
         }
-        const bool queued_authoritative = is_authoritative(queued->state, last_sent[slot]);
-        const bool fresh_authoritative = is_authoritative(fresh.state, last_sent[slot]);
-        if (queued_authoritative && !fresh_authoritative) return;  // preserve release/disconnect
-        queued = fresh;  // newest wins; authoritative state overrides
+        if (queue.size() >= MaxPendingPerSlot) throw PadQueueOverflow();
+        queue.push_back({fresh, discrete});
     }
 
-    // Authoritative samples are delivered first, then the oldest sample.
+    // Drops aged, non-authoritative events from the front of each slot.  A
+    // stale release/neutral is kept because applying it is always safe.
+    void prune_stale(std::int64_t now) {
+        for (std::size_t slot = 0; slot < Slots; ++slot) {
+            auto& queue = pending[slot];
+            while (!queue.empty() && now - queue.front().sample.captured >= StaleEventMs &&
+                   !is_authoritative(queue.front().sample.state, last_sent[slot])) {
+                queue.pop_front();
+                ++dropped_stale;
+            }
+        }
+    }
+
+    // Authoritative events are delivered first across slots; within a slot the
+    // FIFO order is never changed.
     std::optional<PadSample> take_next() {
         std::size_t best = Slots;
         bool best_authoritative = false;
         std::int64_t best_time = std::numeric_limits<std::int64_t>::max();
         for (std::size_t i = 0; i < Slots; ++i) {
-            if (!pending[i].has_value()) continue;
-            const bool authoritative = is_authoritative(pending[i]->state, last_sent[i]);
+            if (pending[i].empty()) continue;
+            const auto& front = pending[i].front().sample;
+            const bool authoritative = is_authoritative(front.state, last_sent[i]);
             const bool prefer = best == Slots ||
                 (authoritative && !best_authoritative) ||
-                (authoritative == best_authoritative && pending[i]->captured < best_time);
+                (authoritative == best_authoritative && front.captured < best_time);
             if (prefer) {
                 best = i;
                 best_authoritative = authoritative;
-                best_time = pending[i]->captured;
+                best_time = front.captured;
             }
         }
         if (best == Slots) return std::nullopt;
-        auto result = pending[best];
-        pending[best].reset();
+        const auto result = pending[best].front().sample;
+        pending[best].pop_front();
         return result;
     }
 
@@ -207,8 +254,8 @@ public:
     }
 
     bool empty() const {
-        for (const auto& item : pending)
-            if (item.has_value()) return false;
+        for (const auto& queue : pending)
+            if (!queue.empty()) return false;
         return true;
     }
 };

@@ -271,12 +271,16 @@ void relay(SSL* ssl,Socket tv,Socket core,const Options& o){
             auto states=capture(o);
             for(std::size_t slot=0;slot<Slots;++slot){
                 if(!initialized||states[slot]!=previous[slot]||(states[slot].connected&&now-refreshed[slot]>=ControllerRefreshMs)){
-                    pads.observe(static_cast<std::uint8_t>(slot),observed.capture,states[slot],now);
+                    try{pads.observe(static_cast<std::uint8_t>(slot),observed.capture,states[slot],now);}
+                    catch(const bridge_wire::PadQueueOverflow&){fail(Reason::Backpressure,"Controller event queue budget exceeded");}
                     previous[slot]=states[slot];refreshed[slot]=now;
                 }
             }
             initialized=true;next_sample=now+bridge_wire::ControllerSampleIntervalMs;
         }
+        // Never replay presses that sat in the queue long enough to be stale;
+        // safety edges (release/neutral/disconnect) survive pruning.
+        pads.prune_stale(now);
 
         // Transport progress, partial-frame progress and the overall transfer
         // budget are independent policies.  Bytes arriving reset the stall
