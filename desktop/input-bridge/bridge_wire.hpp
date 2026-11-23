@@ -244,16 +244,39 @@ public:
         queue.push_back({fresh, discrete});
     }
 
-    // Drops aged non-safety events from the front of each slot.  A stale
-    // release/neutral is kept because applying it is always safe, but a stale
-    // activation (connect with a held button) must not replay.
+    // Projects a stale full-state report onto safety only: every release is
+    // retained, but no control that was inactive in last_sent may be activated.
+    // This matters when one full-state event releases one button and presses
+    // another -- blindly replaying it would re-press the new button.
+    static GamepadState safety_projection(const GamepadState& next, const GamepadState& previous) {
+        GamepadState out{};
+        out.connected = previous.connected && next.connected;
+        if (!out.connected) return out;
+        out.buttons = static_cast<std::uint16_t>(previous.buttons & next.buttons);
+        out.lx = previous.lx == 0 ? 0 : next.lx;
+        out.ly = previous.ly == 0 ? 0 : next.ly;
+        out.rx = previous.rx == 0 ? 0 : next.rx;
+        out.ry = previous.ry == 0 ? 0 : next.ry;
+        out.lt = previous.lt == 0 ? 0 : next.lt;
+        out.rt = previous.rt == 0 ? 0 : next.rt;
+        return out;
+    }
+
+    // Drops aged non-safety events.  A stale safety event is kept, but its
+    // full state is projected so a stale activation cannot be replayed inside
+    // an otherwise safety-relevant (mixed) transition.
     void prune_stale(std::int64_t now) {
         for (std::size_t slot = 0; slot < Slots; ++slot) {
             auto& queue = pending[slot];
-            while (!queue.empty() && now - queue.front().sample.captured >= StaleEventMs &&
-                   !is_safety_event(queue.front().sample.state, last_sent[slot])) {
-                queue.pop_front();
-                ++dropped_stale;
+            for (auto it = queue.begin(); it != queue.end();) {
+                if (now - it->sample.captured < StaleEventMs) { ++it; continue; }
+                if (!is_safety_event(it->sample.state, last_sent[slot])) {
+                    it = queue.erase(it);
+                    ++dropped_stale;
+                    continue;
+                }
+                it->sample.state = safety_projection(it->sample.state, last_sent[slot]);
+                ++it;
             }
         }
     }

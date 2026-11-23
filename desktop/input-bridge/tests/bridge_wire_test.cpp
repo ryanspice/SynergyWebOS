@@ -321,6 +321,24 @@ void test_safety_release_policy() {
     trigger.observe(0, 41, released_trigger, 8);
     trigger.prune_stale(509);
     check(!trigger.empty(), "stale trigger release must be preserved");
+
+    // A mixed full-state event (release A, press B) must not replay the stale
+    // press while still delivering the release.
+    PadCoalescer mixed;
+    GamepadState a_held{};
+    a_held.connected = true;
+    a_held.buttons = 0x0001;
+    mixed.observe(0, 41, a_held, 0);
+    mixed.mark_sent(mixed.take_next().value());
+    GamepadState mixed_change = a_held;
+    mixed_change.buttons = 0x0002;
+    mixed.observe(0, 41, mixed_change, 8);
+    mixed.prune_stale(509);
+    auto projected = mixed.take_next();
+    check(projected && (projected->state.buttons & 0x0002) == 0,
+          "stale mixed event must not replay a new button press");
+    check(projected && (projected->state.buttons & 0x0001) == 0,
+          "stale mixed event still releases the previously held button");
 }
 
 void test_budget_and_staleness() {
