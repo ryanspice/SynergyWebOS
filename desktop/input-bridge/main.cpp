@@ -245,6 +245,7 @@ void observe_frames(Framer& framer,std::span<const std::uint8_t> data){
 void relay(SSL* ssl,Socket tv,Socket core,const Options& o){
     Queue to_tv,to_core;Framer observed,delivered,client_frames;
     PadCoalescer pads;
+    bridge_wire::PadClassicArbiter arbiter;
     std::array<GamepadState,4> previous{};
     std::array<std::int64_t,4> refreshed{};
     bool initialized=false;std::uint32_t previous_capture=0;std::uint64_t sequence=0;
@@ -310,17 +311,20 @@ void relay(SSL* ssl,Socket tv,Socket core,const Options& o){
         // Select the next TLS write.  An in-flight controller write resumes
         // first so it is never replaced mid-transmission.
         if(pending==Write::None){
-            if(inflight){pending=Write::Pad;}
-            else if(focus&&delivered.boundary()&&!pads.empty()){
-                auto sample=pads.take_next();
-                if(sequence==std::numeric_limits<std::uint64_t>::max())fail(Reason::Capture,"Controller sequence exhausted");
-                synergy::bridge::GamepadPacket p{static_cast<std::uint8_t>(sample->slot),sample->capture,++sequence,sample->state};
-                const auto encoded=synergy::bridge::encode_gamepad(p);
-                if(!encoded)fail(Reason::Capture,"Invalid captured controller state");
-                inflight=Inflight{*sample,framed(*encoded)};
-                write_ready=true;pending=Write::Pad;
-            }else if(!to_tv.empty()){
-                pending=Write::Classic;write_ready=true;
+            if(inflight){pending=Write::Pad;}  // finish the frozen write first
+            else{
+                const auto choice=arbiter.choose(focus&&delivered.boundary()&&!pads.empty(),!to_tv.empty());
+                if(choice==bridge_wire::PadClassicArbiter::Choice::Pad){
+                    auto sample=pads.take_next();
+                    if(sequence==std::numeric_limits<std::uint64_t>::max())fail(Reason::Capture,"Controller sequence exhausted");
+                    synergy::bridge::GamepadPacket p{static_cast<std::uint8_t>(sample->slot),sample->capture,++sequence,sample->state};
+                    const auto encoded=synergy::bridge::encode_gamepad(p);
+                    if(!encoded)fail(Reason::Capture,"Invalid captured controller state");
+                    inflight=Inflight{*sample,framed(*encoded)};
+                    write_ready=true;pending=Write::Pad;
+                }else if(choice==bridge_wire::PadClassicArbiter::Choice::Classic){
+                    pending=Write::Classic;write_ready=true;
+                }
             }
         }
 

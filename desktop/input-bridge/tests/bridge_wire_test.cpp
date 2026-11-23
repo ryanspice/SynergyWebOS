@@ -341,6 +341,24 @@ void test_safety_release_policy() {
           "stale mixed event still releases the previously held button");
 }
 
+// Continuous analog motion must not starve classic keyboard/mouse/keepalive
+// frames.  The arbiter yields to classic after a bounded pad burst, and an
+// in-flight write (not represented here) is never preempted by the relay.
+void test_fair_interleaving() {
+    using bridge_wire::PadClassicArbiter;
+    using Choice = PadClassicArbiter::Choice;
+
+    PadClassicArbiter arbiter;
+    for (int i = 0; i < PadClassicArbiter::MaxPadBurst; ++i)
+        check(arbiter.choose(true, true) == Choice::Pad, "pad burst is bounded, not unlimited");
+    check(arbiter.choose(true, true) == Choice::Classic, "classic traffic gets a turn after the pad burst");
+    check(arbiter.pad_burst == 0, "burst counter resets when classic is chosen");
+
+    check(arbiter.choose(true, false) == Choice::Pad, "pad-only traffic continues uninterrupted");
+    check(arbiter.choose(false, true) == Choice::Classic, "classic-only traffic is sent immediately");
+    check(arbiter.choose(false, false) == Choice::None, "idle arbiter chooses no write");
+}
+
 void test_budget_and_staleness() {
     using bridge_wire::GamepadState;
     using bridge_wire::PadCoalescer;
@@ -403,6 +421,7 @@ int main() {
         test_edge_ordering_and_generations();
         test_inflight_focus_loss();
         test_safety_release_policy();
+        test_fair_interleaving();
         test_budget_and_staleness();
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';

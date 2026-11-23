@@ -297,3 +297,40 @@ Host conclusions come from source inspection plus the existing host evidence;
 target GPU, scheduler and physical-input behavior remain speculative until
 measured. The review thread is settled. These gaps are follow-up work, not
 blockers for the v0.4.2 bridge stabilization.
+
+## Production readiness / Synergy 4 Dragon review - November 23, 2026
+
+A read-only production-readiness review covered `native/`, `desktop/input-bridge/`
+and the reverse-engineered Synergy 4 Dragon core (`.ai` research note). Its
+verdict: the 0.4.0 pointer baseline is production verified on hardware; the
+0.4.1 media/controller candidate is host-verified with physical TV acceptance
+still pending; the desktop bridge was flagged on a classic-traffic starvation
+risk; Dragon compatibility is conditional on its "Allow Synergy 1 computers"
+mode.
+
+### Applied in this stabilization pass
+
+- **Classic-traffic starvation (bridge).** `main.cpp` selected `Write::Pad`
+  whenever the controller queue was non-empty, ahead of `Write::Classic`.
+  Added a bounded `PadClassicArbiter` (at most four consecutive controller
+  writes before a classic write at a frame boundary) with host unit coverage.
+  An in-flight TLS write is never preempted. A loopback probe with continuous
+  analog changes and a small receive window showed no regression; the claimed
+  sustained starvation could not be reproduced in that short probe because
+  8 ms sampling produces pads far below the TLS drain rate.
+
+### Recorded follow-ups (outside this bridge PR)
+
+| Item | Location | Status |
+|---|---|---|
+| `DKRP` strict 12-byte check may reject Dragon's optional language suffix | `native/src/protocol.cpp:631` | OPEN - allow `p.size() >= 12`, parse first 12 bytes |
+| TLS on port 24800: Dragon Core defaults to TLS, client fails closed | `native/src/protocol.cpp:74` | GATED - verify Dragon compatibility mode emits plaintext Synergy 1.4 |
+| UI text claims "No TLS or clipboard" and no absolute positioning, both implemented | `native/src/ui.cpp:546` | OPEN - make guidance configuration-aware |
+| Hardcoded `libim.so.1.0.0` soname may change on newer webOS | `native/src/input.cpp:27` | OPEN - add soname fallback list |
+| Gamepad sharing is not part of Dragon Core port 24800 | desktop companion | BY DESIGN - custom mTLS bridge remains required |
+| Cluster mDNS/gRPC discovery | Dragon 24801/5353 | OUT OF SCOPE - manual configuration retained |
+
+These are compatibility and documentation follow-ups, not defects in the
+current 0.4.0/0.4.1 code paths. No Dragon binary, real Synergy server, TV or
+controller was contacted; the Dragon analysis is static/reverse-engineered
+evidence, not an interoperability test.

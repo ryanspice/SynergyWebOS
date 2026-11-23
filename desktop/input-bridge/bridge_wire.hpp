@@ -134,6 +134,35 @@ inline Bytes framed(std::span<const std::uint8_t> payload) {
 using GamepadState = synergy::bridge::GamepadState;
 inline constexpr std::size_t Slots = synergy::bridge::Slots;
 
+// Bounded fair interleaving of controller and classic writes.  Without this,
+// continuous analog motion keeps the pad queue non-empty and starves keyboard,
+// mouse and keepalive frames until a transport deadline ends the session.
+// Decisions are made only at frame boundaries; an already in-flight TLS write
+// is never preempted.
+class PadClassicArbiter {
+public:
+    static constexpr int MaxPadBurst = 4;
+    enum class Choice { None, Pad, Classic };
+
+    Choice choose(bool pad_ready, bool classic_ready) {
+        if (pad_burst >= MaxPadBurst && classic_ready) {
+            pad_burst = 0;
+            return Choice::Classic;
+        }
+        if (pad_ready) {
+            ++pad_burst;
+            return Choice::Pad;
+        }
+        if (classic_ready) {
+            pad_burst = 0;
+            return Choice::Classic;
+        }
+        return Choice::None;
+    }
+
+    int pad_burst = 0;
+};
+
 struct PadSample {
     std::uint8_t slot{};
     std::uint32_t capture{};
