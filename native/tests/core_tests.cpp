@@ -28,9 +28,12 @@ namespace {
         check(failed,name);
     }
     Bytes b(std::string_view s){
-        return {
-            s.begin(),s.end()}
-        ;
+        // Explicit sized construction avoids a GCC 15 -O3 false-positive
+        // -Warray-bounds when the range constructor is inlined next to
+        // subsequent push_back calls on the returned vector.
+        Bytes out(s.size());
+        for(std::size_t i=0;i<s.size();++i)out[i]=static_cast<std::uint8_t>(static_cast<unsigned char>(s[i]));
+        return out;
     }
     void p16(Bytes& v,int n){
         v.push_back(static_cast<uint8_t>(n>>8));
