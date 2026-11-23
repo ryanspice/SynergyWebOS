@@ -342,3 +342,40 @@ These are compatibility and documentation follow-ups, not defects in the
 current 0.4.0/0.4.1 code paths. No Dragon binary, real Synergy server, TV or
 controller was contacted; the Dragon analysis is static/reverse-engineered
 evidence, not an interoperability test.
+
+## Focused transport/runtime review - November 23, 2026
+
+A read-only review of `native/src/client.cpp`, `daemon.cpp`, `ipc.cpp`,
+`platform.cpp` and `ls2_transport.cpp` (plus their headers) found **no new
+actionable findings**. The current `client.cpp` hash matches the independently
+reviewed 2026-11-21 version; its small delta is the already-reviewed descriptor
+ownership and shared errno-classification refactor. No earlier fix regressed:
+cancellable reconnect/backoff and eventfd waits, handshake/idle/partial-frame
+and gamepad deadlines, ordered repeat pumping with bounded ingress, the
+shutdown-aware daemon idle wait, UID admission before request-body reads, and
+LS2 request/reply bounds with deadline and cancellation cleanup all hold in
+source.
+
+Fresh host verification in that review: strict Release build (GNU 13.3.0, UI
+disabled) passed; all 8/8 Client regression modes passed (`slice`, `memory`,
+`timer`, `alt`, `release`, `idle`, `overflow`, `byte-limit`); a protected
+core-test copy passed 300 assertions before a DrvFS runtime-path fixture
+restriction stopped the run. The fresh mTLS suite was blocked by fixture-path
+limits (long path exceeded the runtime limit; the shorter project-local path
+could not create Unix sockets) - a fixture-environment failure, not a
+transport assertion failure. Earlier records of 72 process/TCP/IPC assertions
+and 64 mTLS checks were retained rather than rerun.
+
+### Test gaps / target-unverified risk (recorded, not defects)
+
+| Gap | Scope | Status |
+|---|---|---|
+| Successful reconnect end-to-end: backoff growth/reset, active-session drop then re-entry, repeated cleanup, sleep/wake | `client.cpp`, `client_regressions.cpp`, `integration.py` | OPEN - each client mode makes one connection; integration reconnect starts then stops immediately |
+| LS2 lifecycle: timeout/cancel cleanup, connection recovery, helper/bus restart | `ls2_transport.cpp` | OPEN - no fake-runtime host coverage; target evidence covers schema exchange and caller denial |
+| Platform action cancellation: queued Home/Cycle invalidation, Stop during in-flight Luna action | `platform.cpp`, `core_tests.cpp` | OPEN - source-inspected only |
+| Target UID/jail admission matrix, physical Start/Stop lifecycle, real Home/Cycle effects | target runtime | PENDING target |
+
+Host conclusions come from source inspection plus the fresh host runs above;
+target UID/jail, Luna and reconnect behavior remain unverified. The review
+thread is settled. These are follow-up work, not blockers for the v0.4.2
+bridge stabilization.
