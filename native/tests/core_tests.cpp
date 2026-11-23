@@ -1,6 +1,7 @@
 #include "synergy/protocol.hpp"
 #include "synergy/platform.hpp"
 #include "synergy/input.hpp"
+#include "synergy/i18n.hpp"
 #include "spice/core.hpp"
 #include <algorithm>
 #include <unistd.h>
@@ -913,10 +914,32 @@ namespace {
             "127.0.0.1","192.168.0.2","10.2.3.4","172.16.1.1","172.31.1.1","169.254.1.2","::1","fd00::1"}
         )check(numeric_lan_address(host),"numeric local address allowed");
         for(auto json:{
-            R"({"width":0})",R"({"width":32768})",R"({"port":1.5})",R"({"dry_run":"false"})",R"({"command":"sh"})",R"({"name":"a b"})",R"({"home_target":"shell"})"}
+            R"({"width":0})",R"({"width":32768})",R"({"port":1.5})",R"({"dry_run":"false"})",R"({"command":"sh"})",R"({"name":"a b"})",R"({"home_target":"shell"})",R"({"locale":"fr-FR"})"}
         )rejects([&]{
             Config::from_json(Json::parse(json));}
         ,"config validation");
+        {
+            check(catalog_valid()&&catalog_size()>=80,"i18n catalog has unique, non-empty entries in both locales");
+            check(tr("unknown.key",Locale::En)=="unknown.key","unknown i18n key falls back to its name");
+            check(tr("tab.link",Locale::En)=="Connection"&&
+                  tr("tab.link",Locale::FrCA)=="Connexion","UI tab labels translate to Quebec French");
+            check(tr("events",Locale::FrCA,{{"n","7"}})=="\303\211v\303\251nements : 7","i18n placeholders interpolate in the active locale");
+            check(locale_from_string("fr-CA")==Locale::FrCA&&locale_from_string("fr-FR")==Locale::FrCA&&
+                  locale_from_string("en-GB")==Locale::En&&locale_from_string("de")==Locale::Unknown,
+                  "locale tags map to supported UI locales");
+            check(std::string(locale_string(Locale::FrCA))=="fr-CA"&&
+                  std::string(locale_string(locale_from_string("fr-CA")))=="fr-CA",
+                  "locale string roundtrip");
+            Config localized;
+            localized.server="192.168.1.10";
+            localized.locale="fr-CA";
+            localized.validate();
+            auto localized_round=Config::from_json(Json::parse(localized.json().dump()));
+            check(localized_round.locale=="fr-CA"&&locale_from_string(localized_round.locale)==Locale::FrCA,
+                  "UI locale persists through the typed config roundtrip");
+            check(locale_from_string(Config::from_json(Json::parse(R"({"server":"192.168.1.10"})")).locale)==Locale::En,
+                  "missing locale defaults to English");
+        }
         c.dry_run=false;
         rejects([&]{
             c.validate();}

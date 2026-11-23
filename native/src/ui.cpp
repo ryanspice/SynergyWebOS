@@ -1,6 +1,7 @@
 #include "spice/render.hpp"
 #include "synergy/ipc.hpp"
 #include "synergy/protocol.hpp"
+#include "synergy/i18n.hpp"
 #ifdef SYNERGY_USE_LS2
 #include "synergy/ls2_transport.hpp"
 #endif
@@ -160,21 +161,23 @@ namespace synergy {
             spice::Sdl& sdl_;
             std::vector<Button> buttons_;
             std::string focus_="tab-link", editing_, edit_text_, old_focus_;
-            bool uppercase_=false, loaded_=false, status_pending_=false, schema_warned_=false;
+            bool uppercase_=false, loaded_=false, status_pending_=false, schema_warned_=false, locale_dirty_=false;
             int64_t refresh_=0;
             Json status_,probe_;
             Config config_;
-            std::string page_="link", notice_="Start the separately provisioned daemon to connect.", last_key_;
+            Locale locale_=Locale::En;
+            std::string page_="link", notice_=tr("notice.start_daemon",Locale::En), last_key_;
             bool error_=false;
             std::string corner_="bottom-right";
             int corner_pixels_=2,delay_=250;
+            std::string T(std::string_view key,TrArgs args={})const{return tr(key,locale_,args);}
             void say(std::string message,bool error=false){
                 notice_=std::move(message);
                 error_=error;
             }
             bool post(const std::string& tag,Json job) {
                 if(worker_.post(tag,std::move(job)))return true;
-                say("Control queue is full; wait for the current request to finish.",true);
+                say(T("notice.queue_full"),true);
                 return false;
             }
             void command(const std::string& op) {
@@ -203,7 +206,7 @@ namespace synergy {
                     else if(editing_=="height")config_.height=checked_integer(edit_text_,1,32767);
                     else if(editing_=="hold")config_.home_delay_ms=checked_integer(edit_text_,0,5000);
                     close_edit();
-                    say("Draft changed. Save before starting a new connection.");
+                    say(T("notice.draft_changed"));
                 }
                 catch(const std::exception& e){
                     say(e.what(),true);
@@ -239,7 +242,7 @@ namespace synergy {
             }
             void field(spice::Renderer& r,const std::string& id,const std::string& label,const std::string& value,float x,float y,float w) {
                 r.text(label,x,y,23,Muted);
-                add(id,value.empty()?"Select to enter":value,{
+                add(id,value.empty()?T("field.empty"):value,{
                     x,y+36,w,64}
                 );
             }
@@ -278,34 +281,36 @@ namespace synergy {
                         const auto schema=static_cast<int>(status_.get("schema").num(-1));
                         if(schema!=synergy::ControlSchema) {
                             if(!schema_warned_) {
-                                say("Daemon control schema "+std::to_string(schema)+" does not match UI schema "+std::to_string(synergy::ControlSchema)+"; update the app/daemon pair.",true);
+                                say(T("notice.schema",{{"a",std::to_string(schema)},{"b",std::to_string(synergy::ControlSchema)}}),true);
                                 schema_warned_=true;
                             }
                         }
                         else schema_warned_=false;
                         if(!loaded_){
                             config_=Config::from_json(status_.get("saved_config"));
+                            if(!locale_dirty_)locale_=locale_from_string(config_.locale);
+                            config_.locale=locale_string(locale_);
                             loaded_=true;
-                            say("Daemon available. Dry run first; real input needs explicit approval.");
+                            say(T("notice.daemon_available"));
                         }
                     }
                     else if(tag=="probe") {
                         probe_=result;
-                        say("Probe complete. No virtual devices were created.");
+                        say(T("notice.probe_complete"));
                     }
                     else if(tag=="configure") {
-                        say("Configuration saved; a running connection keeps its active settings.");
+                        say(T("notice.config_saved"));
                     }
-                    else if(tag=="configure-start")say("Configuration saved; start accepted. Check status for the connection result.");
+                    else if(tag=="configure-start")say(T("notice.config_start"));
                     else if(tag=="profile-load") {
                         auto p=result.get("profile");
                         corner_=p.get("corner").str("bottom-right");
                         corner_pixels_=static_cast<int>(p.get("cornerPixels").num(2));
                         delay_=static_cast<int>(p.get("switchDelayMs").num(250));
-                        say("Local handoff reference loaded; desktop Synergy was not changed.");
+                        say(T("notice.profile_load"));
                     }
-                    else if(tag=="profile-save")say("Handoff reference saved locally. Apply server-side settings separately.");
-                    else say("Request accepted: "+tag+". Check status for its result.");
+                    else if(tag=="profile-save")say(T("notice.profile_save"));
+                    else say(T("notice.request",{{"tag",tag}}));
                 }
                 if(active&&monotonic_ms()>=refresh_&&!status_pending_) {
                     auto j=Json::object();
@@ -356,17 +361,24 @@ namespace synergy {
                 else if(id=="hold")edit(id,std::to_string(config_.home_delay_ms));
                 else if(id=="dry"){
                     config_.dry_run=!config_.dry_run;
-                    say(config_.dry_run?"Dry run selected.":"Real input selected. Plaintext approval and a rooted TV are also required.",!config_.dry_run);
+                    say(config_.dry_run?T("notice.dry_on"):T("notice.real"),!config_.dry_run);
                 }
                 else if(id=="plain"){
                     config_.allow_plaintext=!config_.allow_plaintext;
-                    say("Unencrypted keyboard traffic is suitable only for an isolated trusted LAN.",true);
+                    say(T("notice.plaintext"),true);
                 }
                 else if(id=="cursor"){
                     config_.cursor_keepalive=!config_.cursor_keepalive;
-                    say("Experimental one-pixel cursor nudge; not absolute pointer synchronization.");
+                    say(T("notice.cursor"));
                 }
                 else if(id=="home-target")config_.home_target=config_.home_target=="system"?"off":"system";
+                else if(id=="language"){
+                    locale_dirty_=true;
+                    locale_=locale_==Locale::En?Locale::FrCA:Locale::En;
+                    config_.locale=locale_string(locale_);
+                    say(T("language.changed",{{"name",locale_name(locale_)}}));
+                    save(false);
+                }
                 else if(id=="save")save(false);
                 else if(id=="start")save(true);
                 else if(id=="stop"||id=="probe")command(id);
@@ -473,128 +485,132 @@ namespace synergy {
                     64.f+static_cast<float>(i%2)*19,57.f+static_cast<float>(i/2)*19,14,14}
                 ,i==3?Amber:Teal,3);
                 r.text("Synergy",118,47,40,Text);
-                r.text("WEBOS / NATIVE",298,66,18,Muted);
-                r.text("Your desk, on the TV.",64,122,22,Muted);
+                r.text(T("brand.sub"),298,66,18,Muted);
+                r.text(T("home.tagline"),64,122,22,Muted);
                 const std::vector<std::pair<std::string,std::string>> tabs{
                     {
-                        "link","Connection"}
+                        "link",T("tab.link")}
                     ,{
-                        "input","Input"}
+                        "input",T("tab.input")}
                     ,{
-                        "handoff","Handoff"}
+                        "handoff",T("tab.handoff")}
                     ,{
-                        "diagnostics","Diagnostics"}
+                        "diagnostics",T("tab.diagnostics")}
                 }
                 ;
                 for(size_t i=0;i<tabs.size();++i)add("tab-"+tabs[i].first,tabs[i].second,{
                     64+static_cast<float>(i)*244,184,228,62}
                 ,page_==tabs[i].first);
-                add("exit","Close UI",Rect{
+                add("language",T("language"),Rect{
+                    1380,60,250,62}
+                );
+                add("exit",T("close"),Rect{
                     1650,60,205,62}
                 );
                 auto client=status_.get("client");
                 auto state=client.get("state").str("daemon offline");
-                r.text(state,1440,150,22,state=="active"?Teal:Muted);
+                auto state_label=state=="active"?T("state.active"):state=="connecting"?T("state.connecting"):state=="stopped"?T("state.stopped"):T("state.offline");
+                r.text(state_label,1440,150,22,state=="active"?Teal:Muted);
                 r.line(64,274,1856,274,Line);
                 if(page_=="link") {
-                    r.text("One desktop. One shared keyboard.",64,308,42,Text);
-                    text_line(r,"Connect to Synergy Core on your desktop; this is input sharing, not screen streaming.",64,369,1770);
-                    field(r,"server","DESKTOP LAN IP",config_.server,64,430,730);
-                    field(r,"port","CORE PORT",std::to_string(config_.port),830,430,300);
-                    field(r,"name","TV SCREEN NAME",config_.name,64,570,1066);
-                    add("dry",config_.dry_run?"Dry run: ON":"Real input selected",{
+                    r.text(T("link.title"),64,308,42,Text);
+                    text_line(r,T("link.lede"),64,369,1770);
+                    field(r,"server",T("field.server"),config_.server,64,430,730);
+                    field(r,"port",T("field.port"),std::to_string(config_.port),830,430,300);
+                    field(r,"name",T("field.name"),config_.name,64,570,1066);
+                    add("dry",config_.dry_run?T("dry.on"):T("dry.off"),{
                         64,720,335,66}
                     ,config_.dry_run);
-                    add("save","Save settings",{
+                    add("save",T("save"),{
                         420,720,335,66}
                     );
-                    add("start","Save + Connect",{
+                    add("start",T("start"),{
                         776,720,354,66}
                     );
-                    add("stop","Stop / release input",{
+                    add("stop",T("stop"),{
                         64,815,335,66}
                     );
-                    add("probe","Probe TV",{
+                    add("probe",T("probe"),{
                         420,815,335,66}
                     );
                     r.rect({
                         1190,430,666,451}
                     ,Panel,18);
-                    r.text("Connection guardrails",1224,464,30,Text);
-                    text_line(r,"01   Desktop runs Synergy server",1224,530,595);
-                    text_line(r,"02   Screen name matches server layout",1224,579,595);
-                    text_line(r,"03   Prove dry-run events first",1224,628,595);
-                    text_line(r,"04   Root + uinput for real TV input",1224,677,595);
-                    text_line(r,"Events: "+std::to_string(static_cast<uint64_t>(client.get("input_events").num())),1224,748,595,28,Teal);
-                    text_line(r,"Saved settings do not mutate an active session.",1224,815,595,21);
+                    r.text(T("guardrails.title"),1224,464,30,Text);
+                    text_line(r,T("guardrail.1"),1224,530,595);
+                    text_line(r,T("guardrail.2"),1224,579,595);
+                    text_line(r,T("guardrail.3"),1224,628,595);
+                    text_line(r,T("guardrail.4"),1224,677,595);
+                    text_line(r,T("events",{{"n",std::to_string(static_cast<uint64_t>(client.get("input_events").num()))}}),1224,748,595,28,Teal);
+                    text_line(r,T("saved_settings"),1224,815,595,21);
                 }
                 else if(page_=="input") {
-                    r.text("Deliberate control. Safe release.",64,308,42,Text);
-                    text_line(r,"Meta opens Home; Alt stays normal until its five-second hold. Alt+Tab cycles running apps.",64,369,1770);
-                    field(r,"width","PROTOCOL WIDTH",std::to_string(config_.width),64,432,390);
-                    field(r,"height","PROTOCOL HEIGHT",std::to_string(config_.height),490,432,390);
-                    field(r,"hold","META HOLD / MILLISECONDS",std::to_string(config_.home_delay_ms),916,432,440);
-                    add("home-target","Meta target: "+config_.home_target,{
+                    r.text(T("input.title"),64,308,42,Text);
+                    text_line(r,T("input.lede"),64,369,1770);
+                    field(r,"width",T("field.width"),std::to_string(config_.width),64,432,390);
+                    field(r,"height",T("field.height"),std::to_string(config_.height),490,432,390);
+                    field(r,"hold",T("field.hold"),std::to_string(config_.home_delay_ms),916,432,440);
+                    add("home-target",T("meta_target",{{"v",config_.home_target=="system"?T("value.system"):T("value.off")}}),{
                         64,582,390,66}
                     );
-                    add("cursor",config_.cursor_keepalive?"Cursor nudge: ON":"Cursor nudge: OFF",{
+                    add("cursor",config_.cursor_keepalive?T("cursor.on"):T("cursor.off"),{
                         490,582,390,66}
                     ,config_.cursor_keepalive);
-                    add("plain",config_.allow_plaintext?"Plaintext input approved":"Approve plaintext input",{
+                    add("plain",config_.allow_plaintext?T("plaintext.approved"):T("plaintext.approve"),{
                         916,582,440,66}
                     ,config_.allow_plaintext);
-                    text_line(r,"No TLS or clipboard. Never expose port 24800 to the Internet.",64,696,1740,27,Amber);
-                    text_line(r,"Relative cursor movement is not guaranteed absolute positioning on webOS.",64,746,1740);
-                    add("save","Save settings",{
+                    text_line(r,T("input.warning"),64,696,1740,27,Amber);
+                    text_line(r,T("input.note"),64,746,1740);
+                    add("save",T("save"),{
                         64,814,390,66}
                     );
-                    add("boot",status_.get("autostart").flag()?"Disable boot connection":"Enable boot connection",{
+                    add("boot",status_.get("autostart").flag()?T("boot.disable"):T("boot.enable"),{
                         490,814,410,66}
                     ,status_.get("autostart").flag());
-                    text_line(r,"Boot connection needs explicit root provisioning; legacy hooks are never replaced.",64,916,1740,22);
+                    text_line(r,T("boot.note"),64,916,1740,22);
                 }
                 else if(page_=="handoff") {
-                    r.text("Handoff is a server-side decision.",64,308,42,Text);
-                    text_line(r,"Keep a local reference for desktop settings. Saving here never edits your Windows Synergy configuration.",64,369,1770);
-                    add("corner","Corner: "+corner_,{
+                    r.text(T("handoff.title"),64,308,42,Text);
+                    text_line(r,T("handoff.lede"),64,369,1770);
+                    add("corner",T("corner",{{"v",T("corner."+corner_)}}),{
                         64,460,590,78}
                     );
-                    add("corner-size","Corner reference: "+std::to_string(corner_pixels_)+" px",{
+                    add("corner-size",T("corner.reference",{{"n",std::to_string(corner_pixels_)}}),{
                         690,460,530,78}
                     );
-                    add("switch-delay","Delay reference: "+std::to_string(delay_)+" ms",{
+                    add("switch-delay",T("delay.reference",{{"n",std::to_string(delay_)}}),{
                         1256,460,600,78}
                     );
                     r.rect({
                         64,592,1792,184}
                     ,Panel,18);
-                    r.text("Corner preferences, without hidden desktop changes.",96,625,32,Amber);
-                    text_line(r,"The legacy desktop helper uses a server edge approximation. This client does not implement a new server protocol.",96,685,1725,25);
-                    add("profile-save","Save local reference",{
+                    r.text(T("handoff.warning"),96,625,32,Amber);
+                    text_line(r,T("handoff.note"),96,685,1725,25);
+                    add("profile-save",T("profile.save"),{
                         64,815,430,66}
                     );
-                    add("profile-load","Load local reference",{
+                    add("profile-load",T("profile.load"),{
                         530,815,430,66}
                     );
                 }
                 else {
-                    r.text("Connection and input diagnostics.",64,308,42,Text);
-                    add("probe","Read-only input probe",{
+                    r.text(T("diag.title"),64,308,42,Text);
+                    add("probe",T("diag.probe"),{
                         64,390,400,62}
                     );
-                    text_line(r,"UI UID: "+std::to_string(geteuid())+"   |   Controller UID: "+std::to_string(static_cast<int>(status_.get("controller_uid").num(-1)))+"   |   C++20 / SDL2 / raw GLES2",500,405,1350,23);
+                    text_line(r,T("diag.ids",{{"uid",std::to_string(geteuid())},{"ctrl",std::to_string(static_cast<int>(status_.get("controller_uid").num(-1)))}}),500,405,1350,23);
                     r.rect({
                         64,488,1120,430}
                     ,Panel,16);
                     auto logs=client.get("log");
                     size_t first=logs.size()>9?logs.size()-9:0;
-                    if(logs.size()==0)text_line(r,"No daemon log available.",92,522,1040);
+                    if(logs.size()==0)text_line(r,T("diag.no_log"),92,522,1040);
                     for(size_t i=first;i<logs.size();++i)text_line(r,logs.at(i).str(),92,522+static_cast<float>(i-first)*39,1065,22);
-                    text_line(r,"PROBE",1224,495,600,20,Teal);
-                    text_line(r,"Root: "+std::string(probe_.get("root").flag()?"yes":"not established"),1224,544,620,24);
-                    text_line(r,"uinput writable: "+std::string(probe_.get("uinput_writable").flag()?"yes":"not established"),1224,590,620,24);
-                    text_line(r,"Peer authentication: Unix UID",1224,636,620,24);
-                    text_line(r,"Shared app UID is a shared trust boundary.",1224,682,620,22,Amber);
+                    text_line(r,T("diag.probe_label"),1224,495,600,20,Teal);
+                    text_line(r,T("diag.root",{{"v",probe_.get("root").flag()?T("diag.yes"):T("diag.no")}}),1224,544,620,24);
+                    text_line(r,T("diag.uinput",{{"v",probe_.get("uinput_writable").flag()?T("diag.yes"):T("diag.no")}}),1224,590,620,24);
+                    text_line(r,T("diag.peer"),1224,636,620,24);
+                    text_line(r,T("diag.shared_uid"),1224,682,620,22,Amber);
                     text_line(r,"SynergyWebOS "+std::string(SYNERGY_VERSION),1224,712,620,22);
                     text_line(r,r.renderer,1224,758,620,22);
                     text_line(r,r.version,1224,801,620,22);
@@ -608,26 +624,26 @@ namespace synergy {
                     r.rect({
                         310,168,1300,718}
                     ,Panel,24);
-                    r.text("Edit "+editing_,350,202,32,Text);
+                    r.text(T("edit."+editing_),350,202,32,Text);
                     r.text(r.ellipsis(edit_text_+"|",34,1200),350,262,34,Amber);
                     buttons_.clear();
                     const std::string keys=uppercase_?"1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ.-_: ":"1234567890abcdefghijklmnopqrstuvwxyz.-_: ";
-                    for(size_t i=0;i<keys.size();++i)add("char-"+std::to_string(i),keys[i]==' '?"Space":std::string(1,keys[i]),{
+                    for(size_t i=0;i<keys.size();++i)add("char-"+std::to_string(i),keys[i]==' '?T("edit.space"):std::string(1,keys[i]),{
                         350+static_cast<float>(i%10)*123,350+static_cast<float>(i/10)*82,111,68}
                     );
-                    add("edit-delete","Delete",{
+                    add("edit-delete",T("edit.delete"),{
                         350,710,220,68}
                     );
-                    add("edit-clear","Clear",{
+                    add("edit-clear",T("edit.clear"),{
                         594,710,220,68}
                     );
                     add("edit-case",uppercase_?"abc":"ABC",{
                         838,710,220,68}
                     );
-                    add("edit-apply","Apply",{
+                    add("edit-apply",T("edit.apply"),{
                         1082,710,220,68}
                     );
-                    add("edit-cancel","Cancel",{
+                    add("edit-cancel",T("edit.cancel"),{
                         1326,710,220,68}
                     );
                     draw_buttons(r);
@@ -637,7 +653,7 @@ namespace synergy {
                 ,Panel);
                 r.line(64,986,1856,986,Line);
                 text_line(r,notice_,64,1007,1792,23,error_?Danger:Muted);
-                text_line(r,"D-pad / pointer to navigate    OK to select    Back to cancel    Close UI keeps the daemon running",64,1044,1792,18);
+                text_line(r,T("footer"),64,1044,1792,18);
             }
         }
         ;

@@ -1,4 +1,5 @@
 #include "synergy/config.hpp"
+#include "synergy/i18n.hpp"
 #include <arpa/inet.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -64,6 +65,7 @@ namespace synergy {
         if(name.empty()||name.size()>64)throw std::runtime_error("Screen name must be 1..64 ASCII letters, digits, '.', '_' or '-'");
         for(unsigned char c:name)if(!((c>='a'&&c<='z')||(c>='A'&&c<='Z')||(c>='0'&&c<='9')||c=='.'||c=='_'||c=='-'))throw std::runtime_error("Unsafe screen name");
         if(home_target!="system"&&home_target!="off")throw std::runtime_error("Home target must be system or off");
+        if(std::string(locale_string(locale_from_string(locale)))!=locale)throw std::runtime_error("Locale must be en or fr-CA");
         if(home_delay_ms<0||home_delay_ms>5000||idle_timeout_ms<3000||idle_timeout_ms>60000)throw std::runtime_error("Invalid timeout");
         if(input_bridge){
             for(const auto* file:{&bridge_ca_file,&bridge_cert_file,&bridge_key_file}){
@@ -90,6 +92,7 @@ namespace synergy {
         j.set("allow_plaintext",Json::boolean(allow_plaintext));
         j.set("cursor_keepalive",Json::boolean(cursor_keepalive));
         j.set("home_target",Json::string(home_target));
+        j.set("locale",Json::string(locale));
         j.set("home_delay_ms",Json::number(home_delay_ms));
         j.set("idle_timeout_ms",Json::number(idle_timeout_ms));
         j.set("input_bridge",Json::boolean(input_bridge));
@@ -103,7 +106,7 @@ namespace synergy {
         if(!j.object_type())throw std::runtime_error("Config must be an object");
         Config c;
         const std::set<std::string> allowed{
-            "server","port","name","width","height","dry_run","allow_plaintext","cursor_keepalive","home_target","home_delay_ms","idle_timeout_ms", "input_bridge","bridge_ca_file","bridge_cert_file","bridge_key_file","bridge_server_name"}
+            "server","port","name","width","height","dry_run","allow_plaintext","cursor_keepalive","home_target","locale","home_delay_ms","idle_timeout_ms", "input_bridge","bridge_ca_file","bridge_cert_file","bridge_key_file","bridge_server_name"}
         ;
         for(const auto& [k,v]:j.members()){
             (void)v;
@@ -133,6 +136,7 @@ namespace synergy {
         text("server",c.server);
         text("name",c.name);
         text("home_target",c.home_target);
+        text("locale",c.locale);
         text("bridge_ca_file",c.bridge_ca_file);
         text("bridge_cert_file",c.bridge_cert_file);
         text("bridge_key_file",c.bridge_key_file);

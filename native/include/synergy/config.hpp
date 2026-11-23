@@ -14,6 +14,7 @@ struct Config {
     int width=1920,height=1080;
     bool dry_run=true,allow_plaintext=false,cursor_keepalive=false;
     std::string home_target="system";
+    std::string locale="en";
     int home_delay_ms=0;
     int idle_timeout_ms=15000;
     bool input_bridge=false;
