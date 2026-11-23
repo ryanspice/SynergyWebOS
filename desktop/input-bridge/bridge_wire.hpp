@@ -111,13 +111,15 @@ struct Queue {
 
 inline Bytes framed(std::span<const std::uint8_t> payload) {
     const auto n = static_cast<std::uint32_t>(payload.size());
-    Bytes data;
-    data.reserve(4 + payload.size());
-    data.push_back(static_cast<std::uint8_t>(n >> 24));
-    data.push_back(static_cast<std::uint8_t>(n >> 16));
-    data.push_back(static_cast<std::uint8_t>(n >> 8));
-    data.push_back(static_cast<std::uint8_t>(n));
-    data.insert(data.end(), payload.begin(), payload.end());
+    // One sized allocation with indexed copies.  The reserve/push_back/insert
+    // pattern triggers a GCC 15 -Werror=free-nonheap-object false positive at
+    // -O3; this form is equivalent and keeps strict warnings enabled.
+    Bytes data(4 + payload.size());
+    data[0] = static_cast<std::uint8_t>(n >> 24);
+    data[1] = static_cast<std::uint8_t>(n >> 16);
+    data[2] = static_cast<std::uint8_t>(n >> 8);
+    data[3] = static_cast<std::uint8_t>(n);
+    for (std::size_t i = 0; i < payload.size(); ++i) data[4 + i] = payload[i];
     return data;
 }
 

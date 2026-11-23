@@ -21,7 +21,7 @@ def main() -> int:
         raise SystemExit("usage: native_proxy_e2e.py PROXY DAEMON CTL")
     proxy_bin, daemon_bin, ctl_bin = map(lambda p: str(Path(p).resolve()), sys.argv[1:])
     project = Path(__file__).resolve().parents[3]
-    evidence = project / ".ai/evidence/input-0.4.1-implementation-20261113/proxy-verification"
+    evidence = project / ".ai/evidence/input-0.4.2-stabilization-20261122/proxy-verification"
     evidence.mkdir(parents=True, exist_ok=True)
     private_root = tempfile.TemporaryDirectory(prefix="synergy-proxy-e2e-")
     os.chmod(private_root.name, 0o700)
@@ -195,7 +195,7 @@ def main() -> int:
                 if len(pending) < 4:
                     raise AssertionError("Stop left a partial classic frame at synthetic core")
                 length = int.from_bytes(pending[:4], "big")
-                if length > 1024 * 1024 or len(pending) < 4 + length:
+                if length > 4 * 1024 * 1024 or len(pending) < 4 + length:
                     raise AssertionError("Stop left an incomplete or oversized classic frame")
                 body = bytes(pending[4:4 + length])
                 if body != b"CNOP":

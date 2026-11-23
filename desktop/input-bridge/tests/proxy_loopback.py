@@ -18,7 +18,7 @@ import threading
 import time
 
 ROOT = Path(__file__).resolve().parents[3]
-EVIDENCE = ROOT / ".ai/evidence/input-0.4.1-implementation-20261113/proxy-verification"
+EVIDENCE = ROOT / ".ai/evidence/input-0.4.2-stabilization-20261122/proxy-verification"
 # The Synergy protocol reference allows messages up to 4 MiB.
 MAX_FRAME = 4 * 1024 * 1024
 checks: list[str] = []
