@@ -208,6 +208,8 @@ namespace {
             FrameDecoder decoder(true);
             std::vector<Bytes> emitted;
             auto receive=[&](Bytes&& payload){emitted.push_back(std::move(payload));};
+            decoder.consume(frame(b("CNOP")),receive,32);  // clear first-frame handshake guard
+            emitted.clear();
             Bytes body(1536*1024,'y');std::copy_n("DCLP",4,body.begin());
             auto wire=frame(body);
             size_t completed=0,peak=0;
