@@ -156,6 +156,7 @@ Options options(int argc,char** argv){
     in_addr address{};if(inet_pton(AF_INET,o.listen.c_str(),&address)!=1)fail(Reason::Configuration,"Listen address must be numeric IPv4");
     const auto ip=ntohl(address.s_addr);
     const bool loop=(ip>>24)==127;
+    // 0xac1 is the top 12 bits of 172.16.0.0/12; 0xc0a8 is 192.168.0.0/16.
     if(!loop&&(ip>>24)!=10&&(ip>>20)!=0xac1&&(ip>>16)!=0xc0a8)fail(Reason::Configuration,"Listen address must be private LAN or loopback");
     if(!o.fixture.empty()&&!loop)fail(Reason::Configuration,"Synthetic fixture capture is loopback-only");
 #ifndef _WIN32

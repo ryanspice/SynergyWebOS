@@ -1,8 +1,9 @@
 #pragma once
 
 // Pure, platform-independent wire logic for the desktop input bridge.
-// No sockets, OpenSSL or Windows headers belong here so the parser, queue and
-// controller coalescing policy can be unit tested on any C++20 host.
+// No sockets, OpenSSL or platform headers belong here; the shared gamepad wire
+// header is standard C++ only.  This keeps the parser, queue and controller
+// coalescing policy unit-testable on any C++20 host.
 
 #include "synergy/gamepad_wire.hpp"
 

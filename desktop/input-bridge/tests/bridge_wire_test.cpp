@@ -240,6 +240,40 @@ void test_edge_ordering_and_generations() {
           "trigger zero crossing is queued as a discrete edge");
 }
 
+// Models the relay's in-flight TLS write: a sample already taken for
+// transmission must stay byte-for-byte stable when focus is lost, while every
+// unsent sample is discarded.  The full TLS WANT_WRITE path is exercised by a
+// separate slow-reader end-to-end probe.
+void test_inflight_focus_loss() {
+    using bridge_wire::GamepadState;
+    using bridge_wire::PadCoalescer;
+
+    PadCoalescer pads;
+    GamepadState held{};
+    held.connected = true;
+    held.buttons = 0x0001;
+    pads.observe(0, 41, held, 0);
+    const auto inflight = pads.take_next();  // handed to SSL_write, now frozen
+    check(inflight && inflight->state.buttons == 1, "in-flight sample captured before focus loss");
+
+    GamepadState unsent = held;
+    unsent.buttons = 0x0002;
+    pads.observe(1, 41, unsent, 8);
+    pads.focus_lost();
+    check(pads.empty(), "focus loss discards all unsent samples");
+    check(inflight->state.buttons == 1 && inflight->capture == 41 && inflight->slot == 0,
+          "in-flight sample bytes remain unchanged after focus loss");
+    pads.mark_sent(*inflight);  // a completed write is still recorded
+    check(pads.last_sent[0].buttons == 1, "completed in-flight write updates last-sent state");
+
+    // A new capture starts clean; no old-generation state leaks into it.
+    GamepadState reentry{};
+    reentry.connected = true;
+    pads.observe(0, 42, reentry, 16);
+    auto next = pads.take_next();
+    check(next && next->capture == 42, "re-entry emits only the new capture generation");
+}
+
 void test_budget_and_staleness() {
     using bridge_wire::GamepadState;
     using bridge_wire::PadCoalescer;
@@ -300,6 +334,7 @@ int main() {
         test_rapid_press_release_edges();
         test_coalescing();
         test_edge_ordering_and_generations();
+        test_inflight_focus_loss();
         test_budget_and_staleness();
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';
