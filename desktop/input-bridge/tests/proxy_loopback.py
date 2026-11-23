@@ -18,7 +18,9 @@ import threading
 import time
 
 ROOT = Path(__file__).resolve().parents[3]
-EVIDENCE = ROOT / ".ai/evidence/input-0.4.1-implementation-20261113/proxy-verification"
+EVIDENCE = ROOT / ".ai/evidence/input-0.4.2-stabilization-20261122/proxy-verification"
+# The Synergy protocol reference allows messages up to 4 MiB.
+MAX_FRAME = 4 * 1024 * 1024
 checks: list[str] = []
 
 
@@ -40,7 +42,7 @@ def receive(sock: socket.socket, size: int) -> bytes:
 
 def packet(sock: socket.socket) -> bytes:
     length, = struct.unpack("!I", receive(sock, 4))
-    check(length <= 1024 * 1024, "received classic frames stay within the 1 MiB protocol cap")
+    check(length <= MAX_FRAME, "received classic frames stay within the 4 MiB protocol cap")
     return receive(sock, length)
 
 
@@ -353,10 +355,14 @@ def main() -> int:
                                            state=(0, 0, 0, 0, 0, 0, 0, 0))
             checks.append("hot-unplug emits neutral disconnected reports for all four slots")
 
-            # A >256 KiB opaque clipboard-like body must stream intact without packet interleaving.
+            # Opaque clipboard-like bodies, including one above the old 1 MiB
+            # cap, must stream intact without packet interleaving.
             body = b"DCLP" + bytes((i * 17) & 0xff for i in range(320 * 1024))
             send_fragments(server, framed(body))
             check(packet(tv) == body, "320 KiB classic body streams intact with frame boundaries preserved")
+            large_body = b"DCLP" + bytes((i * 31) & 0xff for i in range(1536 * 1024))
+            send_fragments(server, framed(large_body))
+            check(packet(tv) == large_body, "1.5 MiB classic body streams intact beyond the old 1 MiB limit")
 
             # COUT cancels polling/forwarding; invalid fixture proves no post-leave capture read.
             cout = b"COUT"
@@ -390,6 +396,32 @@ def main() -> int:
             check(fields[2:4] == (0, 1) and fields[7:] == (48, 300, -400, 500, -600, 10, 20),
                   "re-entry forwards current fixture state instead of old controller state")
             last_sequence = fields[6]
+
+            # Losing focus while a button is held stops controller delivery but
+            # leaves the classic relay alive.  No stale DGPD may follow COUT;
+            # the TV neutralizes controls on leave and its watchdog.
+            send_fragments(server, framed(b"COUT"))
+            for _ in range(40):
+                frame = packet(tv)
+                if frame == b"COUT":
+                    break
+                check(frame[:4] == b"DGPD", "controller refresh precedes COUT")
+            else:
+                raise AssertionError("COUT was not delivered after held-button focus loss")
+            send_fragments(tv, framed(b"CNOP"))
+            check(receive(server, len(framed(b"CNOP"))) == framed(b"CNOP"),
+                  "focus-loss acknowledgement relays unchanged")
+            write_fixture(fixture, ["broken fixture must remain unread after held-button COUT"])
+            time.sleep(0.18)
+            check(not select.select([tv], [], [], 0.05)[0],
+                  "no stale controller report follows held-button focus loss")
+            send_fragments(server, framed(b"CALV"))
+            check(packet(tv) == b"CALV", "session remains live after held-button focus loss")
+            send_fragments(tv, framed(b"CNOP"))
+            check(receive(server, len(framed(b"CNOP"))) == framed(b"CNOP"),
+                  "post-focus-loss keepalive response relays unchanged")
+            # Restore a valid fixture before the next session takes focus.
+            write_fixture(fixture, reentry_rows)
 
             # Explicitly close the valid connection and authenticate a fresh mTLS connection.
             tv.close()

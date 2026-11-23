@@ -28,9 +28,12 @@ namespace {
         check(failed,name);
     }
     Bytes b(std::string_view s){
-        return {
-            s.begin(),s.end()}
-        ;
+        // Explicit sized construction avoids a GCC 15 -O3 false-positive
+        // -Warray-bounds when the range constructor is inlined next to
+        // subsequent push_back calls on the returned vector.
+        Bytes out(s.size());
+        for(std::size_t i=0;i<s.size();++i)out[i]=static_cast<std::uint8_t>(static_cast<unsigned char>(s[i]));
+        return out;
     }
     void p16(Bytes& v,int n){
         v.push_back(static_cast<uint8_t>(n>>8));
@@ -200,6 +203,23 @@ namespace {
             rejects([&]{decoder.consume(std::span(wire).first(8),receive,32);},"first handshake frame cannot be discarded as clipboard");
         }
         {
+            // Parity with the desktop bridge conformance test: a 1.5 MiB
+            // clipboard body must stream through the native receiver too.
+            FrameDecoder decoder(true);
+            std::vector<Bytes> emitted;
+            auto receive=[&](Bytes&& payload){emitted.push_back(std::move(payload));};
+            decoder.consume(frame(b("CNOP")),receive,32);  // clear first-frame handshake guard
+            emitted.clear();
+            Bytes body(1536*1024,'y');std::copy_n("DCLP",4,body.begin());
+            auto wire=frame(body);
+            size_t completed=0,peak=0;
+            for(size_t at=0;at<wire.size();at+=16384){
+                completed+=decoder.consume(std::span(wire).subspan(at,std::min<size_t>(16384,wire.size()-at)),receive,32);
+                peak=std::max(peak,decoder.retained_bytes());
+            }
+            check(completed==1&&emitted.empty()&&peak==0,"1.5 MiB ignored body streams without retention or rejection");
+        }
+        {
             FrameDecoder decoder;
             Bytes payload(100,'x');std::copy_n("DSOP",4,payload.begin());
             auto wire=frame(payload);
@@ -230,7 +250,7 @@ namespace {
             check(d.feed(f).at(0).size()==1024*1024,"maximum bounded frame");
         }
         rejects([]{
-            frame(Bytes(1024*1024+1));}
+            frame(Bytes(FrameDecoder::MaxFrame+1));}
         ,"oversized outbound frame rejected");
         {
             Harness h;

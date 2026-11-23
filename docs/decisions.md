@@ -174,3 +174,21 @@ Newest first. Each entry: id, date, decision, owner, review condition.
 - **Owner:** lead/owner. **Review:** before the first native TV install and in
   the release notes.
 
+## D-013 — Input bridge 0.4.2 stabilization scope and deferred listener multiplexing
+
+- **Date:** 2026-11-22
+- **Context:** a source review of the 0.4.1 desktop bridge found a Windows port
+  reuse weakness, focus transitions that could close the session during a
+  backpressured controller write, a 1 MiB frame cap below the protocol's 4 MiB
+  maximum, over-aggressive freshness/frame deadlines, a listener blocked by a
+  synchronous relay, and TLS readiness/coalescing/diagnostic gaps.
+- **Decision:** the 0.4.2 stabilization pass fixes the port binding, controller
+  coalescing and in-flight write stability, frame limit, timing policies, TLS
+  write readiness and diagnostics, with focused host tests. A single active
+  paired session and the synchronous relay are **retained deliberately** for
+  this pass because the bridge serves one TV; the accept loop is not yet
+  multiplexed with an active relay. Receiver-side controller neutralization on
+  COUT/disconnect/watchdog remains part of the TV-side 0.4.1 contract and is
+  covered here only by the bridge-side held-button focus-loss test.
+- **Owner:** lead. **Review:** before a multiplexed or multi-client bridge is
+  attempted; revisit if a second concurrent client is ever required.

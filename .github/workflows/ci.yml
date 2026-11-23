@@ -7,6 +7,9 @@
 #   3. build-test   — legacy web 0.3.4 build/package + suite on Windows. It is
 #                     migration source, not the native 0.4.0 artifact.
 #   4. native       — native C++20 Release + CTest and ASan/UBSan on Linux.
+#   5. bridge       — desktop input bridge build, CTest and synthetic mTLS
+#                     loopback checks, independent of the native core job.
+#   6. bridge-windows — MSVC x64 bridge compile + CTest (Windows capture target).
 #
 # Live TV/PC checks are NOT part of CI. They require a rooted TV and the live
 # Synergy server and are recorded as maintainer acceptance (docs/testing.md).
@@ -142,6 +145,7 @@ jobs:
         run: |
           cmake -S desktop/input-bridge -B desktop/input-bridge/build/ci -G Ninja -DCMAKE_BUILD_TYPE=Release
           cmake --build desktop/input-bridge/build/ci --parallel 4
+          ctest --test-dir desktop/input-bridge/build/ci --output-on-failure
           fixture_root="$(mktemp -d /tmp/sy041.XXXXXX)"
           trap 'rm -rf -- "$fixture_root"' EXIT
           export TMPDIR="$fixture_root"
@@ -160,3 +164,67 @@ jobs:
           trap 'rm -rf -- "$fixture_root"' EXIT
           SYNERGY_TEST_POSIX_ROOT="$fixture_root" TMPDIR="$fixture_root" \
             ctest --test-dir native/build/asan --output-on-failure
+
+  bridge:
+    name: Desktop input bridge (Linux fixtures)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PYTHONUTF8: '1'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install bridge dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            g++ cmake ninja-build libssl-dev openssl python3
+          echo "compiler: $(g++ --version | head -1)"
+          echo "openssl: $(openssl version)"
+
+      - name: Configure and build bridge
+        run: |
+          cmake -S desktop/input-bridge -B desktop/input-bridge/build/ci -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build desktop/input-bridge/build/ci --parallel 4
+
+      - name: Run bridge-wire CTest
+        run: ctest --test-dir desktop/input-bridge/build/ci --output-on-failure
+
+      - name: Run synthetic mTLS loopback suite
+        run: |
+          fixture_root="$(mktemp -d /tmp/syb042.XXXXXX)"
+          trap 'rm -rf -- "$fixture_root"' EXIT
+          TMPDIR="$fixture_root" \
+            python3 desktop/input-bridge/tests/proxy_loopback.py desktop/input-bridge/build/ci/synergy-input-bridge
+
+  bridge-windows:
+    name: Desktop input bridge (MSVC x64)
+    # windows-2022 carries Visual Studio 17 2022; windows-latest currently
+    # resolves to a VS 2026 image, which this generator does not match.
+    runs-on: windows-2022
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install OpenSSL 3 x64 with vcpkg
+        shell: pwsh
+        run: |
+          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install openssl:x64-windows
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Configure MSVC x64 build
+        shell: pwsh
+        run: |
+          cmake -S desktop/input-bridge -B desktop/input-bridge/build/windows -G "Visual Studio 17 2022" -A x64 "-DCMAKE_TOOLCHAIN_FILE=$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Build and test bridge
+        shell: pwsh
+        run: |
+          cmake --build desktop/input-bridge/build/windows --config Release --parallel 4
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ctest --test-dir desktop/input-bridge/build/windows -C Release --output-on-failure
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Get-Item desktop/input-bridge/build/windows/Release/synergy-input-bridge.exe | Select-Object FullName,Length
