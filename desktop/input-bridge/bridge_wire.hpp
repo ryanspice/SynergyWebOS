@@ -38,6 +38,13 @@ inline constexpr std::int64_t FrameStallMs = 5000;
 inline constexpr std::int64_t FrameTransferDeadlineMs = 60000;
 inline constexpr std::int64_t ControllerSampleIntervalMs = 8;
 
+// Protocol framing violations are reported with a typed error so the relay can
+// translate them into a categorized [FRAME] session-end reason.
+class FrameError : public std::runtime_error {
+public:
+    explicit FrameError(const char* what) : std::runtime_error(what) {}
+};
+
 // Observes bytes only after the corresponding read/write completed.  It keeps
 // at most 14 payload bytes and never retains a clipboard body.  A frame longer
 // than MaxFrameLength is rejected, but frames up to that size stream through
@@ -59,7 +66,7 @@ struct Framer {
                     length = 0;
                     for (auto value : prefix) length = (length << 8) | value;
                     if (length < 4 || length > MaxFrameLength)
-                        throw std::runtime_error("Invalid classic frame size");
+                        throw FrameError("Invalid classic frame size");
                     remaining = length;
                     head_used = 0;
                 }
@@ -68,13 +75,13 @@ struct Framer {
             if (head_used < head.size()) head[head_used++] = byte;
             if (--remaining) continue;
             if (std::memcmp(head.data(), "CINN", 4) == 0) {
-                if (length != 14) throw std::runtime_error("Malformed focus enter");
+                if (length != 14) throw FrameError("Malformed focus enter");
                 capture = 0;
                 for (std::size_t i = 8; i < 12; ++i) capture = (capture << 8) | head[i];
                 active = true;
             } else if (std::memcmp(head.data(), "COUT", 4) == 0 ||
                        std::memcmp(head.data(), "CBYE", 4) == 0) {
-                if (length != 4) throw std::runtime_error("Malformed focus leave");
+                if (length != 4) throw FrameError("Malformed focus leave");
                 active = false;
             }
             prefix_used = 0;
@@ -142,13 +149,27 @@ public:
     PadQueueOverflow() : std::runtime_error("Controller event queue budget exceeded") {}
 };
 
-// Safety-relevant for cross-slot ordering and stale-event pruning: a release,
-// a disconnect or a neutral state undoes held controls on the TV.
-inline bool is_authoritative(const GamepadState& next, const GamepadState& previous) {
-    if (next.connected != previous.connected) return true;
+// A safety event undoes an active control on the TV and must survive pruning
+// even when stale: disconnect/neutral, a released button, a trigger returning
+// to zero, or any single stick axis returning to neutral.  An activation (a
+// controller connecting with a button already held) is NOT a safety event;
+// replaying it after a long delay would re-press a button the user released.
+inline bool is_safety_event(const GamepadState& next, const GamepadState& previous) {
+    if (next.connected != previous.connected) return !next.connected;
     if (!next.connected) return true;
     if ((previous.buttons & ~next.buttons) != 0) return true;
+    if (previous.lt != 0 && next.lt == 0) return true;
+    if (previous.rt != 0 && next.rt == 0) return true;
+    if ((previous.lx != 0 && next.lx == 0) || (previous.ly != 0 && next.ly == 0) ||
+        (previous.rx != 0 && next.rx == 0) || (previous.ry != 0 && next.ry == 0))
+        return true;
     return false;
+}
+
+// Kept as the name used by cross-slot ordering and stale pruning: only safety
+// releases are authoritative, not activations.
+inline bool is_authoritative(const GamepadState& next, const GamepadState& previous) {
+    return is_safety_event(next, previous);
 }
 
 struct PendingPad {
@@ -178,11 +199,16 @@ public:
         return s.lx == 0 && s.ly == 0 && s.rx == 0 && s.ry == 0;
     }
 
+    static bool stick_neutralized(const GamepadState& a, const GamepadState& b) {
+        return (a.lx != 0 && b.lx == 0) || (a.ly != 0 && b.ly == 0) ||
+               (a.rx != 0 && b.rx == 0) || (a.ry != 0 && b.ry == 0);
+    }
+
     static bool is_discrete_change(const GamepadState& a, const GamepadState& b) {
         return a.connected != b.connected || a.buttons != b.buttons ||
             ((a.lt == 0) != (b.lt == 0)) ||
             ((a.rt == 0) != (b.rt == 0)) ||
-            (!neutral_sticks(a) && neutral_sticks(b));
+            stick_neutralized(a, b);
     }
 
     // Focus loss clears only unsent state.  A write already handed to OpenSSL

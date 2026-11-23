@@ -274,6 +274,55 @@ void test_inflight_focus_loss() {
     check(next && next->capture == 42, "re-entry emits only the new capture generation");
 }
 
+// Re-review regressions: stale activations must not replay, while safety
+// neutrals must survive pruning even if only one stick axis is involved.
+void test_safety_release_policy() {
+    using bridge_wire::GamepadState;
+    using bridge_wire::PadCoalescer;
+
+    PadCoalescer activation;
+    GamepadState pressed{};
+    pressed.connected = true;
+    pressed.buttons = 1;
+    activation.observe(0, 41, pressed, 0);
+    activation.prune_stale(PadCoalescer::StaleEventMs + 1);
+    check(activation.empty(), "stale initial press must not replay");
+
+    PadCoalescer neutral;
+    GamepadState held{};
+    held.connected = true;
+    held.lx = 15000;
+    neutral.observe(0, 41, held, 0);
+    neutral.mark_sent(neutral.take_next().value());
+    auto released = held;
+    released.lx = 0;
+    neutral.observe(0, 41, released, 8);
+    neutral.prune_stale(509);
+    check(!neutral.empty(), "stale stick neutral must be preserved");
+
+    GamepadState before{};
+    before.connected = true;
+    before.lx = 15000;
+    before.rx = 12000;
+    auto after = before;
+    after.lx = 0;
+    check(PadCoalescer::is_discrete_change(before, after),
+          "left-stick neutral must be discrete even while the right stick is active");
+
+    // Trigger zero crossings are safety releases too.
+    PadCoalescer trigger;
+    GamepadState firing{};
+    firing.connected = true;
+    firing.rt = 255;
+    trigger.observe(0, 41, firing, 0);
+    trigger.mark_sent(trigger.take_next().value());
+    auto released_trigger = firing;
+    released_trigger.rt = 0;
+    trigger.observe(0, 41, released_trigger, 8);
+    trigger.prune_stale(509);
+    check(!trigger.empty(), "stale trigger release must be preserved");
+}
+
 void test_budget_and_staleness() {
     using bridge_wire::GamepadState;
     using bridge_wire::PadCoalescer;
@@ -335,6 +384,7 @@ int main() {
         test_coalescing();
         test_edge_ordering_and_generations();
         test_inflight_focus_loss();
+        test_safety_release_policy();
         test_budget_and_staleness();
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';

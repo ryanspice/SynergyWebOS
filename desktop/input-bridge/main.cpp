@@ -237,6 +237,11 @@ void authenticate(SSL* ssl,const Options& o,Socket socket){
     if(CRYPTO_memcmp(expected.data(),digest.data(),digest.size())!=0)fail(Reason::Tls,"TV certificate pin mismatch");
 }
 
+void observe_frames(Framer& framer,std::span<const std::uint8_t> data){
+    try{framer.consume(data);}
+    catch(const bridge_wire::FrameError& error){fail(Reason::Frame,error.what());}
+}
+
 void relay(SSL* ssl,Socket tv,Socket core,const Options& o){
     Queue to_tv,to_core;Framer observed,delivered,client_frames;
     PadCoalescer pads;
@@ -326,7 +331,7 @@ void relay(SSL* ssl,Socket tv,Socket core,const Options& o){
             ERR_clear_error();const int rc=SSL_write(ssl,data.data(),static_cast<int>(data.size()));
             if(rc>0){
                 if(static_cast<std::size_t>(rc)!=data.size())fail(Reason::Tls,"Unexpected partial TLS write");
-                if(pending==Write::Classic){delivered.consume(data);to_tv.consume(static_cast<std::size_t>(rc));}
+                if(pending==Write::Classic){observe_frames(delivered,data);to_tv.consume(static_cast<std::size_t>(rc));}
                 else{pads.mark_sent(inflight->sample);inflight.reset();}
                 pending=Write::None;write_ready=true;write_want=POLLOUT;tv_progress=now_ms();
             }else{
@@ -362,7 +367,7 @@ void relay(SSL* ssl,Socket tv,Socket core,const Options& o){
             ERR_clear_error();const int count=SSL_read(ssl,buffer.data(),static_cast<int>(buffer.size()));
             if(count>0){
                 const std::span<const std::uint8_t> data(buffer.data(),static_cast<std::size_t>(count));
-                client_frames.consume(data);
+                observe_frames(client_frames,data);
                 to_core.push(Bytes(data.begin(),data.end()));read_want=POLLIN;last_tv_byte=now_ms();
             }else{
                 read_want=tls_retry_event(SSL_get_error(ssl,count),"TV TLS read closed");
@@ -372,7 +377,7 @@ void relay(SSL* ssl,Socket tv,Socket core,const Options& o){
             const int count=static_cast<int>(recv(core,reinterpret_cast<char*>(buffer.data()),static_cast<int>(buffer.size()),0));
             if(count>0){
                 const std::span<const std::uint8_t> data(buffer.data(),static_cast<std::size_t>(count));
-                observed.consume(data);to_tv.push(Bytes(data.begin(),data.end()));last_core_byte=now_ms();
+                observe_frames(observed,data);to_tv.push(Bytes(data.begin(),data.end()));last_core_byte=now_ms();
             }else if(count==0||!would_block())fail(Reason::Transport,"Upstream closed");
         }
     }
