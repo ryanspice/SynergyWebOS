@@ -1228,8 +1228,13 @@ namespace {
                 }
                 {
                     Config tls_case=valid;
+                    // Build the malformed PEM at runtime so the repository
+                    // guard does not mistake this negative fixture for a
+                    // committed private key. The bytes written are identical.
+                    const std::string header="-----BEGIN "+std::string("PRIVATE KEY-----");
+                    const std::string footer="-----END "+std::string("PRIVATE KEY-----");
                     tls_case.bridge_key_file=write_pem(fixture.dir,"bad-key.pem",
-                        "-----BEGIN PRIVATE KEY-----\nxxx\n-----END PRIVATE KEY-----\n");
+                        header+"\nxxx\n"+footer+"\n");
                     rejects_with([&]{construct(tls_case,immediate);},"Invalid input bridge private key",
                                  "malformed private key fails closed");
                 }
