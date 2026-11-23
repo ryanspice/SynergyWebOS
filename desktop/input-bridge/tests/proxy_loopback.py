@@ -420,6 +420,8 @@ def main() -> int:
             send_fragments(tv, framed(b"CNOP"))
             check(receive(server, len(framed(b"CNOP"))) == framed(b"CNOP"),
                   "post-focus-loss keepalive response relays unchanged")
+            # Restore a valid fixture before the next session takes focus.
+            write_fixture(fixture, reentry_rows)
 
             # Explicitly close the valid connection and authenticate a fresh mTLS connection.
             tv.close()
