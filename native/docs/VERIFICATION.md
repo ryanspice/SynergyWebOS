@@ -318,6 +318,14 @@ mode.
   analog changes and a small receive window showed no regression; the claimed
   sustained starvation could not be reproduced in that short probe because
   8 ms sampling produces pads far below the TLS drain rate.
+- **Bridge/native frame-size mismatch.** The bridge accepts 4 MiB frames but
+  `FrameDecoder::MaxFrame` was still 1 MiB, so the 1.5 MiB `DCLP` body that the
+  proxy conformance test forwards would disconnect the native receiver before
+  ignored-body streaming. Raised the native limit to 4 MiB (retained commands
+  still obey the 256 KiB caller budget, ignored bodies stream without
+  allocation) and added a native test proving the 1.5 MiB ignored body streams
+  with zero retained bytes. Updated the outbound-limit test to derive from
+  `MaxFrame` instead of a hard-coded 1 MiB.
 
 ### Recorded follow-ups (outside this bridge PR)
 
