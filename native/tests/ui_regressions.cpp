@@ -174,6 +174,22 @@ namespace {
     void rename(synergy::Deck& deck,const std::string& name){
         deck.activate("name");deck.activate("edit-clear");deck.text(name);deck.activate("edit-apply");
     }
+    void language_toggle(spice::Sdl& sdl,const std::filesystem::path& root){
+        Broker broker(root/"language");
+        synergy::ControlWorker worker(root/"language");
+        synergy::Deck deck(worker,sdl,"link");
+        load(deck);
+        check(deck.report().get("draft").get("locale").str()=="en","saved English locale is loaded into the UI");
+        deck.activate("language");
+        check(deck.report().get("draft").get("locale").str()=="fr-CA","language control switches the UI locale immediately");
+        wait([&]{return broker.blocked.load();});
+        broker.unblock=true;
+        flush(deck,broker);
+        check(deck.report().get("draft").get("locale").str()=="fr-CA","a status refresh does not revert the chosen locale");
+        const auto calls=broker.snapshot();
+        check(std::any_of(calls.begin(),calls.end(),[](const std::string& c){return c.rfind("configure:",0)==0;}),
+              "language choice is persisted through a configure request");
+    }
     // Two FIFO markers also drain any UI-originated follow-up from the first update.
     void flush(synergy::Deck& deck,Broker& broker){
         for(int i=0;i<2;++i){
@@ -409,7 +425,7 @@ int main(int argc,char** argv){
         if(!window.window)throw std::runtime_error(sdl.GetError());
         window.gl=sdl.GL_CreateContext(window.window);if(!window.gl)throw std::runtime_error(sdl.GetError());
         real_lookup=sdl.GL_GetProcAddress;sdl.GL_GetProcAddress=lookup;
-        transactions(sdl,argv[1]);stopping_and_waking(sdl,argv[1]);rendering(sdl,argv[1]);alpha_text(sdl);text_layout(sdl);redraw_gating(sdl,argv[1]);
+        transactions(sdl,argv[1]);language_toggle(sdl,argv[1]);stopping_and_waking(sdl,argv[1]);rendering(sdl,argv[1]);alpha_text(sdl);text_layout(sdl);redraw_gating(sdl,argv[1]);
         std::cout<<(failures?"FAIL: ":"PASS: ")<<checks<<" UI regression assertions; failures="<<failures<<'\n';
         return failures?1:0;
     }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}
