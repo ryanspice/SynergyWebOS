@@ -379,3 +379,21 @@ Host conclusions come from source inspection plus the fresh host runs above;
 target UID/jail, Luna and reconnect behavior remain unverified. The review
 thread is settled. These are follow-up work, not blockers for the v0.4.2
 bridge stabilization.
+
+## Focused desktop-bridge review disposition - November 22, 2026
+
+A focused review of `desktop/input-bridge/main.cpp`, `bridge_wire.hpp` and
+`tests/bridge_wire_test.cpp` at commit `0d6ebf3` produced six findings. Their
+current disposition:
+
+| Review claim | Disposition |
+|---|---|
+| Framer invalid-length test uses a 1 MiB literal | Not reproduced - the test uses `MaxFrameLength + 1` both at `0d6ebf3` and currently |
+| `0xac1` is a malformed IPv4 literal | Not reproduced - it is the top 12 bits of `172.16.0.0/12` (verified numerically); an explanatory comment was added |
+| No test for focus loss during a backpressured TLS write | Valid - added `test_inflight_focus_loss()`; the full `WANT_WRITE` path is covered by a local forced-slow-reader probe |
+| `mark_sent` missing in the coalescing test | Not reproduced in the current test |
+| No Windows listener test | Valid - an MSVC x64 CI job (VS 2022, strict warnings) now builds and tests the bridge |
+| Header comments claim platform headers | Verified the shared gamepad header is pure standard C++; comments clarified |
+
+No product defect from that review remained unaddressed. The review thread is
+settled; these dispositions are recorded here for traceability.
