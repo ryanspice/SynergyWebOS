@@ -1,4 +1,4 @@
-# Synergy input bridge 0.4.1 candidate
+# Synergy input bridge 0.4.2 stabilization candidate
 
 This native companion adds focus-gated XInput forwarding to the 0.4.1 TV client.
 It terminates mutually authenticated TLS from the TV, checks the permitted TV
@@ -24,11 +24,42 @@ not been implemented. These are capability gaps, not claimed working features.
 TV app recognition and physical-device behavior require separate acceptance.
 
 The 0.4.1 candidate passed Linux/Windows compilation, 81 loopback conformance
-checks and a 14-check actual-daemon/proxy/synthetic-Core smoke test. Test sources
-are under `tests/`; build and cleanup receipts are in the project evidence lane.
-Queue saturation, timing under sustained backpressure, real XInput hardware and
-physical TV operation remain separate gates. The relay caps both queued payload
-bytes and allocation chunks.
+checks and a 14-check actual-daemon/proxy/synthetic-Core smoke test. The 0.4.2
+stabilization pass below adds focused host checks; the original 81-check suite
+and the Windows build must be rerun in their own environments before release.
+Test sources are under `tests/`; build and cleanup receipts are in the project
+evidence lane. Queue saturation, timing under sustained backpressure, real
+XInput hardware and physical TV operation remain separate gates. The relay caps
+both queued payload bytes and allocation chunks.
+
+## 0.4.2 stabilization pass
+
+This pass addresses the transport and timing findings from the 0.4.1 source
+review without changing the trust model or adding controller features:
+
+- Windows listeners now use `SO_EXCLUSIVEADDRUSE` instead of `SO_REUSEADDR`, so
+  another process cannot hijack the listening endpoint. Non-Windows keeps
+  `SO_REUSEADDR`.
+- Controller updates that have not started transmission are coalesced per slot.
+  The newest analog state wins, while connection changes, neutral states and
+  button releases stay authoritative. Sequence numbers are assigned only when
+  a packet actually starts transmission.
+- Losing focus no longer tears down the session during a backpressured TLS
+  write. An in-flight controller packet keeps its original buffer until it
+  completes; only unsent state is discarded. Transport progress, partial-frame
+  progress and an overall transfer budget are tracked separately from input
+  freshness, so a large but progressing transfer is not treated as stale.
+- The incremental frame limit now matches the protocol's 4 MiB maximum. The
+  parser still retains only a 14-byte command head, not the payload.
+- TLS writes wait for the readiness OpenSSL requested instead of retrying a
+  backpressured socket each iteration. Session-end reasons carry terse error
+  codes (for example `[FRAME]`, `[BACKPRESSURE]`, `[TLS]`).
+
+The pure wire policy lives in `bridge_wire.hpp` and is covered by the
+`bridge-wire-test` host target (`ctest`). The longer Python conformance suite in
+`tests/` now checks a body above the old 1 MiB limit and focus loss with a held
+button. `docs/decisions.md` records the deliberately deferred single-active-
+session listener change (D-013).
 
 ## Build
 

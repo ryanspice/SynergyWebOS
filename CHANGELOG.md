@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.4.2 stabilization candidate — unreleased
+
+Focused stabilization of the optional desktop input bridge (no TV package or
+controller feature change). Windows listeners take exclusive ownership of the
+port; controller updates are coalesced with authoritative release/disconnect
+reports; focus loss during a backpressured TLS write no longer ends the session;
+transport, frame and freshness deadlines are separated; the incremental frame
+limit matches the protocol's 4 MiB maximum; TLS writes respect requested
+readiness; and session-end logs carry terse reason codes. Adds host unit tests
+for the extracted wire policy. See the
+[companion guide](desktop/input-bridge/README.md) and D-013 in
+[decisions](docs/decisions.md) for scope and deferred work.
+
 ## 0.4.1 candidate — unreleased
 
 ### Focused input

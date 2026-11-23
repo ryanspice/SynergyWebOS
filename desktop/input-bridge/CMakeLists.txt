@@ -16,3 +16,15 @@ if(MSVC)
 else()
   target_compile_options(synergy-input-bridge PRIVATE -Wall -Wextra -Wpedantic -Wshadow -Werror)
 endif()
+
+# Host-only unit tests for the platform-independent parser, queue and
+# controller coalescing policy.  No OpenSSL, sockets or Windows SDK required.
+enable_testing()
+add_executable(bridge-wire-test tests/bridge_wire_test.cpp)
+target_include_directories(bridge-wire-test PRIVATE ../../native/include)
+if(MSVC)
+  target_compile_options(bridge-wire-test PRIVATE /W4 /WX /permissive-)
+else()
+  target_compile_options(bridge-wire-test PRIVATE -Wall -Wextra -Wpedantic -Wshadow -Werror)
+endif()
+add_test(NAME bridge-wire COMMAND bridge-wire-test)
