@@ -333,7 +333,7 @@ mode.
 |---|---|---|
 | `DKRP` strict 12-byte check may reject Dragon's optional language suffix | `native/src/protocol.cpp:631` | OPEN - allow `p.size() >= 12`, parse first 12 bytes |
 | TLS on port 24800: Dragon Core defaults to TLS, client fails closed | `native/src/protocol.cpp:74` | GATED - verify Dragon compatibility mode emits plaintext Synergy 1.4 |
-| UI text claims "No TLS or clipboard" and no absolute positioning, both implemented | `native/src/ui.cpp:546` | OPEN - make guidance configuration-aware |
+| UI text claimed "No TLS or clipboard" and no absolute positioning, both implemented | `native/src/i18n.cpp` `input.warning` / `input.note` | RESOLVED - both locales now state that clipboard is unsupported, the optional mTLS bridge carries controller input, and absolute positioning is implemented |
 | Hardcoded `libim.so.1.0.0` soname may change on newer webOS | `native/src/input.cpp:27` | OPEN - add soname fallback list |
 | Gamepad sharing is not part of Dragon Core port 24800 | desktop companion | BY DESIGN - custom mTLS bridge remains required |
 | Cluster mDNS/gRPC discovery | Dragon 24801/5353 | OUT OF SCOPE - manual configuration retained |
