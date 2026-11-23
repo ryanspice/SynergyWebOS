@@ -409,6 +409,101 @@ void test_budget_and_staleness() {
     check(safety.pending[0].size() == 1 && safety.dropped_stale == 0,
           "stale release is retained because applying it is safe");
 }
+
+// Ingress and budget edge cases that had no direct host coverage. All inputs
+// and times are synthetic; no sockets, real clocks or OpenSSL are involved.
+void test_ingress_and_budget_boundaries() {
+    // A focus frame whose declared length is not the wire contract (CINN is
+    // exactly 14 bytes, COUT/CBYE exactly 4) must fail closed before focus
+    // state is changed. Existing coverage only checked generic frame sizes.
+    for (std::uint8_t wrong_length : {std::uint8_t{13}, std::uint8_t{15}}) {
+        bridge_wire::Bytes payload(14, 0);
+        std::copy_n("CINN", 4, payload.begin());
+        payload.resize(wrong_length);
+        bool rejected = false;
+        bridge_wire::Framer framer;
+        try {
+            framer.consume(bridge_wire::framed(payload));
+        } catch (const bridge_wire::FrameError&) {
+            rejected = true;
+        }
+        check(rejected && !framer.active && framer.capture == 0,
+              "focus-enter frame with a non-contract length is rejected without entering focus");
+    }
+    for (const char* command : {"COUT", "CBYE"}) {
+        bridge_wire::Bytes payload(5, 0);
+        std::copy_n(command, 4, payload.begin());
+        bridge_wire::Framer focused;
+        bridge_wire::Bytes valid_cinn(14, 0);
+        std::copy_n("CINN", 4, valid_cinn.begin());
+        focused.consume(bridge_wire::framed(valid_cinn));
+        check(focused.active, "focus is established before the malformed leave frame");
+        bool rejected = false;
+        try {
+            focused.consume(bridge_wire::framed(payload));
+        } catch (const bridge_wire::FrameError&) {
+            rejected = true;
+        }
+        check(rejected && focused.active,
+              "focus-leave frame with a non-contract length is rejected without clearing focus");
+    }
+
+    // The capture ID is read big-endian across all four bytes; the widest
+    // value must survive the incremental parser unchanged.
+    bridge_wire::Framer widest;
+    bridge_wire::Bytes maximum_cinn(14, 0);
+    std::copy_n("CINN", 4, maximum_cinn.begin());
+    maximum_cinn[8] = maximum_cinn[9] = maximum_cinn[10] = maximum_cinn[11] = 0xff;
+    widest.consume(bridge_wire::framed(maximum_cinn));
+    check(widest.active && widest.capture == 0xffffffffu,
+          "maximum big-endian capture identifier is parsed without truncation");
+
+    // Queue byte budget is inclusive: exactly the limit is accepted, one more
+    // byte is refused, and consumed bytes become available again.
+    bridge_wire::Queue exact;
+    exact.push(body(bridge_wire::QueueLimit));
+    check(exact.bytes == bridge_wire::QueueLimit && !exact.empty(),
+          "queue accepts a payload exactly at its byte budget");
+    bool byte_overflow = false;
+    try {
+        exact.push(body(1));
+    } catch (const std::runtime_error&) {
+        byte_overflow = true;
+    }
+    check(byte_overflow && exact.bytes == bridge_wire::QueueLimit,
+          "one byte beyond the queue budget is refused without changing the queue");
+    exact.consume(bridge_wire::QueueLimit);
+    check(exact.empty() && exact.bytes == 0, "consuming the full payload releases the byte budget");
+    exact.push(body(1));
+    check(exact.bytes == 1 && !exact.empty(), "queue accepts new data after budget release");
+
+    // Chunk budget is also inclusive and independent of the byte budget.
+    bridge_wire::Queue chunks;
+    for (std::size_t i = 0; i < bridge_wire::QueueChunkLimit; ++i) chunks.push(body(1));
+    check(chunks.bytes == bridge_wire::QueueChunkLimit,
+          "queue accepts exactly the maximum number of chunks");
+    bool chunk_overflow = false;
+    try {
+        chunks.push(body(1));
+    } catch (const std::runtime_error&) {
+        chunk_overflow = true;
+    }
+    check(chunk_overflow, "one chunk beyond the queue chunk budget is refused");
+
+    // Staleness is exclusive at the threshold: one millisecond below keeps a
+    // non-safety event; exactly the threshold prunes it. Virtual time only.
+    bridge_wire::PadCoalescer timing;
+    bridge_wire::GamepadState pressed{};
+    pressed.connected = true;
+    pressed.buttons = 1;
+    timing.observe(0, 41, pressed, 1000);
+    timing.prune_stale(1000 + bridge_wire::PadCoalescer::StaleEventMs - 1);
+    check(!timing.empty() && timing.dropped_stale == 0,
+          "event just below the stale threshold is retained");
+    timing.prune_stale(1000 + bridge_wire::PadCoalescer::StaleEventMs);
+    check(timing.empty() && timing.dropped_stale == 1,
+          "event exactly at the stale threshold is pruned");
+}
 }  // namespace
 
 int main() {
@@ -423,6 +518,7 @@ int main() {
         test_safety_release_policy();
         test_fair_interleaving();
         test_budget_and_staleness();
+        test_ingress_and_budget_boundaries();
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';
         return 1;
