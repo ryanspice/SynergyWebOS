@@ -573,6 +573,117 @@ namespace {
             rejects([&]{decoder.consume(combined,[&](Bytes&& p){held.push_back(std::move(p));},8);},"one consume call charges all emitted frame capacities");
             check(held.size()==2,"byte budget stops before retaining the third payload");
         }
+        {
+            // G5: the 256 KiB value is a caller-supplied consume() budget
+            // (client.cpp MaxIngressBytes), not a FrameDecoder constant. The
+            // decoder checks it against the DECLARED TOTAL frame size at
+            // declaration, before reserving or accumulating a body.
+            constexpr size_t Limit=256*1024;
+            Bytes payload(Limit,0x5a);
+            std::copy_n("CALV",4,payload.begin());
+            auto wire=frame(payload);
+            check(wire.size()==Limit+4,"exact-limit wire includes the four-byte length prefix");
+            for(size_t step:{size_t{1},size_t{7},size_t{64*1024},wire.size()}){
+                FrameDecoder decoder;
+                std::vector<Bytes> emitted;
+                auto receive=[&](Bytes&& p){emitted.push_back(std::move(p));};
+                size_t completed=0,peak=0;
+                for(size_t at=0;at<wire.size();at+=step)
+                {
+                    completed+=decoder.consume(
+                        std::span(wire).subspan(at,std::min(step,wire.size()-at)),receive,Limit);
+                    peak=std::max(peak,decoder.retained_bytes());
+                }
+                check(completed==1&&emitted.size()==1&&emitted[0]==payload,
+                      "exact-limit frame decodes under each fragmentation pattern");
+                check(!decoder.partial()&&decoder.retained_bytes()==0,
+                      "exact-limit frame leaves no partial prefix or retained capacity");
+                check(peak<=Limit,"incremental retention never exceeds the declared frame budget");
+            }
+        }
+        {
+            // One byte over the caller budget is refused once the full
+            // eight-byte frame head (length + command) is available, before
+            // any body is supplied and before any capacity is reserved.
+            constexpr size_t Limit=256*1024;
+            Bytes over(Limit+1,0x33);
+            std::copy_n("CALV",4,over.begin());
+            auto wire=frame(over);
+            check(wire.size()==Limit+5,"over-limit declaration uses 256 KiB plus one total bytes");
+            FrameDecoder decoder;
+            rejects([&]{decoder.consume(std::span(wire).first(8),[](Bytes&&){},Limit);},
+                    "declared size above the caller budget is rejected at the frame head");
+            check(decoder.retained_bytes()==0,"invalid declaration reserves or retains no body");
+        }
+        {
+            // Budget is an aggregate allowance per consume() call: capacity
+            // charged by each emitted frame reduces what remains in that call.
+            constexpr size_t Limit=256*1024;
+            Bytes payload(Limit,0x77);
+            std::copy_n("CALV",4,payload.begin());
+            auto one=frame(payload);
+            Bytes combined=one;
+            combined.insert(combined.end(),one.begin(),one.end());
+            FrameDecoder decoder;
+            std::vector<Bytes> emitted;
+            auto receive=[&](Bytes&& p){emitted.push_back(std::move(p));};
+            size_t completed=decoder.consume(combined,receive,2*Limit);
+            check(completed==2&&emitted.size()==2&&emitted[0]==payload&&emitted[1]==payload,
+                  "two exact-limit frames decode when the call budget covers both");
+            check(!decoder.partial()&&decoder.retained_bytes()==0,
+                  "aggregate budget accounting leaves no retained state");
+            FrameDecoder single;
+            std::vector<Bytes> first_only;
+            rejects([&]{
+                single.consume(combined,[&](Bytes&& p){first_only.push_back(std::move(p));},Limit);
+            },"a single-frame budget is a per-call cap, not a per-frame allowance");
+            check(first_only.size()==1,"the first frame is emitted before the aggregate budget is exhausted");
+        }
+        {
+            // An ignored (DCLP) body bypasses the retained-frame budget, even
+            // above the caller limit, and streams with zero retained bytes.
+            FrameDecoder decoder(true);
+            std::vector<Bytes> emitted;
+            auto receive=[&](Bytes&& p){emitted.push_back(std::move(p));};
+            decoder.consume(frame(b("CNOP")),receive,32);  // clear first-frame handshake guard
+            emitted.clear();
+            constexpr size_t Limit=256*1024;
+            Bytes ignored(Limit+1,0x99);
+            std::copy_n("DCLP",4,ignored.begin());
+            auto wire=frame(ignored);
+            size_t completed=0,peak=0;
+            for(size_t at=0;at<wire.size();at+=7)
+            {
+                completed+=decoder.consume(
+                    std::span(wire).subspan(at,std::min<size_t>(7,wire.size()-at)),receive,32);
+                peak=std::max(peak,decoder.retained_bytes());
+            }
+            check(completed==1&&emitted.empty()&&peak==0&&decoder.retained_bytes()==0,
+                  "over-limit ignored DCLP body streams with zero retained capacity");
+        }
+        {
+            // A rejected declaration leaves a partial prefix; clear() is the
+            // documented reset before the decoder can accept another frame.
+            constexpr size_t Limit=256*1024;
+            Bytes payload(Limit,0x11);
+            std::copy_n("CALV",4,payload.begin());
+            auto wire=frame(payload);
+            Bytes too_big(Limit+1,0x22);
+            std::copy_n("CALV",4,too_big.begin());
+            auto over=frame(too_big);
+            FrameDecoder decoder;
+            std::vector<Bytes> emitted;
+            auto receive=[&](Bytes&& p){emitted.push_back(std::move(p));};
+            rejects([&]{decoder.consume(std::span(over).first(8),receive,Limit);},
+                    "declaration error is reported once the frame head arrives");
+            check(decoder.partial(),"a rejected declaration leaves a partial prefix");
+            decoder.clear();
+            check(!decoder.partial()&&decoder.retained_bytes()==0,
+                  "clear() restores a clean decoder after a budget error");
+            size_t completed=decoder.consume(wire,receive,Limit);
+            check(completed==1&&emitted.size()==1&&emitted[0]==payload,
+                  "decoder accepts a valid exact-limit frame after clear()");
+        }
         for(auto bytes:std::vector<Bytes>{
             {
                 0,0,0,0}
