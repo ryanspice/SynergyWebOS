@@ -1,16 +1,27 @@
 #include "synergy/protocol.hpp"
 #include "synergy/platform.hpp"
+#include "synergy/tls.hpp"
 #include "synergy/input.hpp"
 #include "synergy/i18n.hpp"
 #include "spice/core.hpp"
 #include <algorithm>
 #include <unistd.h>
 #include <sys/stat.h>
+#include <sys/socket.h>
+#include <poll.h>
+#include <fcntl.h>
+#include <cstdlib>
+#include <filesystem>
 #include <iostream>
 #include <fstream>
 #include <tuple>
 #include <random>
 #include <ctime>
+#include <openssl/evp.h>
+#include <openssl/ec.h>
+#include <openssl/x509.h>
+#include <openssl/x509v3.h>
+#include <openssl/pem.h>
 using namespace synergy;
 namespace {
     int checks=0;
@@ -88,6 +99,125 @@ namespace {
         p16(v,y);
         return v;
     }
+    template<class F>void rejects_with(F f,const std::string& fragment,const std::string& name){
+        std::string message;
+        try{
+            f();
+        }
+        catch(const std::exception& e){
+            message=e.what();
+        }
+        check(message.find(fragment)!=std::string::npos,name);
+    }
+    // Ephemeral, in-memory generated PKI. Private keys exist only briefly in
+    // mode-0600 files under a mkdtemp directory that is removed by the fixture
+    // destructor; nothing is committed or left on disk.
+    struct TlsFixture {
+        std::string dir,ca,cert,key,other_cert,other_key;
+        ~TlsFixture(){if(!dir.empty())std::filesystem::remove_all(dir);}
+    };
+    std::string pem_cert(X509* cert){
+        BIO* bio=BIO_new(BIO_s_mem());
+        if(!bio||!PEM_write_bio_X509(bio,cert)){BIO_free(bio);throw std::runtime_error("fixture PEM");}
+        char* data=nullptr;
+        const long length=BIO_get_mem_data(bio,&data);
+        std::string out(data,static_cast<size_t>(length));
+        BIO_free(bio);
+        return out;
+    }
+    std::string pem_key(EVP_PKEY* key){
+        BIO* bio=BIO_new(BIO_s_mem());
+        if(!bio||!PEM_write_bio_PrivateKey(bio,key,nullptr,nullptr,0,nullptr,nullptr)){
+            BIO_free(bio);throw std::runtime_error("fixture PEM");
+        }
+        char* data=nullptr;
+        const long length=BIO_get_mem_data(bio,&data);
+        std::string out(data,static_cast<size_t>(length));
+        BIO_free(bio);
+        return out;
+    }
+    EVP_PKEY* fixture_key(){
+        EVP_PKEY_CTX* ctx=EVP_PKEY_CTX_new_id(EVP_PKEY_EC,nullptr);
+        if(!ctx)throw std::runtime_error("fixture key context");
+        EVP_PKEY* key=nullptr;
+        const bool ok=EVP_PKEY_keygen_init(ctx)>0&&
+            EVP_PKEY_CTX_set_ec_paramgen_curve_nid(ctx,NID_X9_62_prime256v1)>0&&
+            EVP_PKEY_keygen(ctx,&key)>0;
+        EVP_PKEY_CTX_free(ctx);
+        if(!ok){if(key)EVP_PKEY_free(key);throw std::runtime_error("fixture key generation");}
+        return key;
+    }
+    X509* fixture_cert(EVP_PKEY* key,const std::string& cn,bool is_ca,
+                       EVP_PKEY* issuer_key,X509* issuer){
+        X509* cert=X509_new();
+        if(!cert)throw std::runtime_error("fixture certificate");
+        X509_set_version(cert,2);
+        ASN1_INTEGER_set(X509_get_serialNumber(cert),is_ca?1:2);
+        X509_gmtime_adj(X509_getm_notBefore(cert),0);
+        X509_gmtime_adj(X509_getm_notAfter(cert),3600);
+        X509_set_pubkey(cert,key);
+        X509_NAME* name=X509_get_subject_name(cert);
+        X509_NAME_add_entry_by_txt(name,"CN",MBSTRING_ASC,
+            reinterpret_cast<const unsigned char*>(cn.c_str()),-1,-1,0);
+        X509_set_issuer_name(cert,issuer?X509_get_subject_name(issuer):name);
+        if(is_ca){
+            X509V3_CTX context;
+            X509V3_set_ctx_nodb(&context);
+            X509V3_set_ctx(&context,cert,cert,nullptr,nullptr,0);
+            X509_EXTENSION* ext=X509V3_EXT_conf_nid(nullptr,&context,NID_basic_constraints,
+                                                    "critical,CA:TRUE");
+            if(!ext||!X509_add_ext(cert,ext,-1)){
+                X509_EXTENSION_free(ext);X509_free(cert);throw std::runtime_error("fixture CA extension");
+            }
+            X509_EXTENSION_free(ext);
+        }
+        if(!X509_sign(cert,issuer_key?issuer_key:key,EVP_sha256())){
+            X509_free(cert);throw std::runtime_error("fixture certificate signature");
+        }
+        return cert;
+    }
+    std::string write_pem(const std::string& dir,const std::string& name,const std::string& text){
+        const std::string path=dir+"/"+name;
+        const int fd=open(path.c_str(),O_WRONLY|O_CREAT|O_EXCL,0600);
+        if(fd<0)throw std::runtime_error("fixture file open");
+        FILE* stream=fdopen(fd,"wb");
+        if(!stream){close(fd);throw std::runtime_error("fixture file stream");}
+        const bool written=fwrite(text.data(),1,text.size(),stream)==text.size();
+        fclose(stream);
+        if(!written)throw std::runtime_error("fixture file write");
+        return path;
+    }
+    TlsFixture make_tls_fixture(){
+        TlsFixture fixture;
+        char pattern[]="/tmp/syn-tls-XXXXXX";
+        char* directory=mkdtemp(pattern);
+        if(!directory)throw std::runtime_error("fixture directory");
+        fixture.dir=directory;
+        EVP_PKEY* ca_key=fixture_key();
+        X509* ca=fixture_cert(ca_key,"Test Bridge CA",true,nullptr,nullptr);
+        EVP_PKEY* client_key=fixture_key();
+        X509* client=fixture_cert(client_key,"bridge.test",false,ca_key,ca);
+        EVP_PKEY* other_key=fixture_key();
+        X509* other=fixture_cert(other_key,"bridge.test",false,ca_key,ca);
+        fixture.ca=write_pem(fixture.dir,"ca.pem",pem_cert(ca));
+        fixture.cert=write_pem(fixture.dir,"client.pem",pem_cert(client));
+        fixture.key=write_pem(fixture.dir,"client.key",pem_key(client_key));
+        fixture.other_cert=write_pem(fixture.dir,"other.pem",pem_cert(other));
+        fixture.other_key=write_pem(fixture.dir,"other.key",pem_key(other_key));
+        EVP_PKEY_free(ca_key);X509_free(ca);
+        EVP_PKEY_free(client_key);X509_free(client);
+        EVP_PKEY_free(other_key);X509_free(other);
+        return fixture;
+    }
+    struct BorrowedSockets {
+        int local=-1,peer=-1;
+        BorrowedSockets(){
+            int fds[2];
+            if(socketpair(AF_UNIX,SOCK_STREAM,0,fds)!=0)throw std::runtime_error("fixture socketpair");
+            local=fds[0];peer=fds[1];
+        }
+        ~BorrowedSockets(){if(local>=0)close(local);if(peer>=0)close(peer);}
+    };
     struct Recorder:Input {
         using E=std::tuple<char,int,int>;
         std::vector<E> events;
@@ -1039,6 +1169,109 @@ namespace {
             );}
         ,"host build cannot create input devices");
 #endif
+        {
+            // G1 (3a): real TlsClient constructor/configuration fail-closed
+            // paths. Every negative case uses real OpenSSL and real temporary
+            // PEM files; no fake TLS, no handshake, no network, no real sleeps.
+            std::string fixture_dir;
+            {
+                TlsFixture fixture=make_tls_fixture();
+                fixture_dir=fixture.dir;
+                Config valid;
+                valid.server="127.0.0.1";
+                valid.input_bridge=true;
+                valid.bridge_ca_file=fixture.ca;
+                valid.bridge_cert_file=fixture.cert;
+                valid.bridge_key_file=fixture.key;
+                valid.bridge_server_name="bridge.test";
+                BorrowedSockets sockets;
+                const TlsClient::Wait immediate=[](short,int64_t){};
+                auto construct=[&](const Config& config,TlsClient::Wait wait){
+                    TlsClient client(sockets.local,config,wait);
+                    (void)client;
+                };
+                {
+                    Config tls_case=valid;tls_case.bridge_ca_file=fixture.dir+"/absent-ca.pem";
+                    rejects([&]{construct(tls_case,immediate);},"missing CA bundle fails closed");
+                }
+                {
+                    Config tls_case=valid;tls_case.bridge_ca_file=write_pem(fixture.dir,"empty-ca.pem","");
+                    rejects_with([&]{construct(tls_case,immediate);},"CA certificate missing",
+                                 "empty CA bundle fails closed");
+                }
+                {
+                    Config tls_case=valid;
+                    tls_case.bridge_ca_file=write_pem(fixture.dir,"bad-ca.pem",
+                        "-----BEGIN CERTIFICATE-----\nnot-certificate-data\n-----END CERTIFICATE-----\n");
+                    rejects_with([&]{construct(tls_case,immediate);},"CA certificate missing",
+                                 "malformed CA PEM fails closed");
+                }
+                {
+                    Config tls_case=valid;tls_case.bridge_cert_file=fixture.dir+"/absent-client.pem";
+                    rejects([&]{construct(tls_case,immediate);},"missing client certificate fails closed");
+                }
+                {
+                    Config tls_case=valid;tls_case.bridge_cert_file=write_pem(fixture.dir,"empty-client.pem","");
+                    rejects_with([&]{construct(tls_case,immediate);},"Invalid input bridge client certificate",
+                                 "empty client certificate fails closed");
+                }
+                {
+                    Config tls_case=valid;
+                    tls_case.bridge_cert_file=write_pem(fixture.dir,"bad-client.pem",
+                        "-----BEGIN CERTIFICATE-----\nxxx\n-----END CERTIFICATE-----\n");
+                    rejects_with([&]{construct(tls_case,immediate);},"Invalid input bridge client certificate",
+                                 "malformed client certificate fails closed");
+                }
+                {
+                    Config tls_case=valid;tls_case.bridge_key_file=fixture.dir+"/absent-key.pem";
+                    rejects([&]{construct(tls_case,immediate);},"missing private key fails closed");
+                }
+                {
+                    Config tls_case=valid;
+                    tls_case.bridge_key_file=write_pem(fixture.dir,"bad-key.pem",
+                        "-----BEGIN PRIVATE KEY-----\nxxx\n-----END PRIVATE KEY-----\n");
+                    rejects_with([&]{construct(tls_case,immediate);},"Invalid input bridge private key",
+                                 "malformed private key fails closed");
+                }
+                {
+                    Config tls_case=valid;tls_case.bridge_cert_file=fixture.other_cert;
+                    rejects_with([&]{construct(tls_case,immediate);},"Invalid input bridge private key",
+                                 "certificate and private key mismatch fails closed");
+                }
+                {
+                    Config tls_case=valid;tls_case.bridge_server_name.clear();
+                    rejects_with([&]{construct(tls_case,immediate);},"Invalid input bridge certificate identity",
+                                 "missing server identity fails closed");
+                }
+                {
+                    // No responding peer: SSL_connect asks the injected wait for
+                    // readiness. Throwing there models an exhausted deadline
+                    // without a real timer or sleep.
+                    const int flags=fcntl(sockets.local,F_GETFL,0);
+                    check(flags>=0&&fcntl(sockets.local,F_SETFL,flags|O_NONBLOCK)==0,
+                          "borrowed socket can be made nonblocking for the deadline case");
+                    short waited_event=0;
+                    bool waited=false;
+                    TlsClient::Wait expiring=[&](short event,int64_t){
+                        waited=true;waited_event=event;
+                        throw std::runtime_error("injected wait deadline exhausted");
+                    };
+                    rejects([&]{construct(valid,expiring);},
+                            "handshake fails closed when the injected wait deadline expires");
+                    check(waited,"handshake entered the injected wait path with no peer");
+                    check(waited_event==POLLIN||waited_event==POLLOUT,
+                          "TLS handshake wait requests a socket readiness event");
+                    check(fcntl(sockets.local,F_GETFD)!=-1,
+                          "borrowed descriptor stays owned by the test after failed construction");
+                    char probe=0;
+                    const ssize_t received=recv(sockets.peer,&probe,1,MSG_DONTWAIT);
+                    check(received<=0||static_cast<unsigned char>(probe)==0x16,
+                          "failed TLS setup emits no classic plaintext to the peer");
+                }
+            }
+            check(!std::filesystem::exists(fixture_dir),
+                  "ephemeral PKI directory and private keys removed on cleanup");
+        }
         // Deterministic malformed-packet stress, no native input backend involved.
         std::mt19937 random(42);
         for(int i=0;i<2000;++i){
