@@ -7,9 +7,11 @@ loopback. It does not modify or replace the installed Synergy service.
 
 The ordinary Synergy keyboard/mouse stream is relayed. Controller state is added
 only after CINN has been delivered and while both observed and delivered focus
-agree. COUT cancels pending state; the TV independently neutralizes controls on
-leave, disconnect and its watchdog. Queues and freshness/backpressure waits are
-bounded; stale controller delivery closes the session instead of replaying it.
+agree. COUT cancels unsent controller state; the TV independently neutralizes
+controls on leave, disconnect and its watchdog. Queues and backpressure waits
+are bounded. Discrete button/connection edges are preserved in order; only
+consecutive analog-only samples are coalesced, and aged non-authoritative
+events are pruned rather than replayed. A full queue fails the session closed.
 
 ## Supported capture and limits
 

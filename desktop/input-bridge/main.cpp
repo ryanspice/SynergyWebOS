@@ -156,6 +156,7 @@ Options options(int argc,char** argv){
     in_addr address{};if(inet_pton(AF_INET,o.listen.c_str(),&address)!=1)fail(Reason::Configuration,"Listen address must be numeric IPv4");
     const auto ip=ntohl(address.s_addr);
     const bool loop=(ip>>24)==127;
+    // 0xac1 is the top 12 bits of 172.16.0.0/12; 0xc0a8 is 192.168.0.0/16.
     if(!loop&&(ip>>24)!=10&&(ip>>20)!=0xac1&&(ip>>16)!=0xc0a8)fail(Reason::Configuration,"Listen address must be private LAN or loopback");
     if(!o.fixture.empty()&&!loop)fail(Reason::Configuration,"Synthetic fixture capture is loopback-only");
 #ifndef _WIN32
@@ -236,9 +237,15 @@ void authenticate(SSL* ssl,const Options& o,Socket socket){
     if(CRYPTO_memcmp(expected.data(),digest.data(),digest.size())!=0)fail(Reason::Tls,"TV certificate pin mismatch");
 }
 
+void observe_frames(Framer& framer,std::span<const std::uint8_t> data){
+    try{framer.consume(data);}
+    catch(const bridge_wire::FrameError& error){fail(Reason::Frame,error.what());}
+}
+
 void relay(SSL* ssl,Socket tv,Socket core,const Options& o){
     Queue to_tv,to_core;Framer observed,delivered,client_frames;
     PadCoalescer pads;
+    bridge_wire::PadClassicArbiter arbiter;
     std::array<GamepadState,4> previous{};
     std::array<std::int64_t,4> refreshed{};
     bool initialized=false;std::uint32_t previous_capture=0;std::uint64_t sequence=0;
@@ -304,17 +311,20 @@ void relay(SSL* ssl,Socket tv,Socket core,const Options& o){
         // Select the next TLS write.  An in-flight controller write resumes
         // first so it is never replaced mid-transmission.
         if(pending==Write::None){
-            if(inflight){pending=Write::Pad;}
-            else if(focus&&delivered.boundary()&&!pads.empty()){
-                auto sample=pads.take_next();
-                if(sequence==std::numeric_limits<std::uint64_t>::max())fail(Reason::Capture,"Controller sequence exhausted");
-                synergy::bridge::GamepadPacket p{static_cast<std::uint8_t>(sample->slot),sample->capture,++sequence,sample->state};
-                const auto encoded=synergy::bridge::encode_gamepad(p);
-                if(!encoded)fail(Reason::Capture,"Invalid captured controller state");
-                inflight=Inflight{*sample,framed(*encoded)};
-                write_ready=true;pending=Write::Pad;
-            }else if(!to_tv.empty()){
-                pending=Write::Classic;write_ready=true;
+            if(inflight){pending=Write::Pad;}  // finish the frozen write first
+            else{
+                const auto choice=arbiter.choose(focus&&delivered.boundary()&&!pads.empty(),!to_tv.empty());
+                if(choice==bridge_wire::PadClassicArbiter::Choice::Pad){
+                    auto sample=pads.take_next();
+                    if(sequence==std::numeric_limits<std::uint64_t>::max())fail(Reason::Capture,"Controller sequence exhausted");
+                    synergy::bridge::GamepadPacket p{static_cast<std::uint8_t>(sample->slot),sample->capture,++sequence,sample->state};
+                    const auto encoded=synergy::bridge::encode_gamepad(p);
+                    if(!encoded)fail(Reason::Capture,"Invalid captured controller state");
+                    inflight=Inflight{*sample,framed(*encoded)};
+                    write_ready=true;pending=Write::Pad;
+                }else if(choice==bridge_wire::PadClassicArbiter::Choice::Classic){
+                    pending=Write::Classic;write_ready=true;
+                }
             }
         }
 
@@ -325,7 +335,7 @@ void relay(SSL* ssl,Socket tv,Socket core,const Options& o){
             ERR_clear_error();const int rc=SSL_write(ssl,data.data(),static_cast<int>(data.size()));
             if(rc>0){
                 if(static_cast<std::size_t>(rc)!=data.size())fail(Reason::Tls,"Unexpected partial TLS write");
-                if(pending==Write::Classic){delivered.consume(data);to_tv.consume(static_cast<std::size_t>(rc));}
+                if(pending==Write::Classic){observe_frames(delivered,data);to_tv.consume(static_cast<std::size_t>(rc));}
                 else{pads.mark_sent(inflight->sample);inflight.reset();}
                 pending=Write::None;write_ready=true;write_want=POLLOUT;tv_progress=now_ms();
             }else{
@@ -361,7 +371,7 @@ void relay(SSL* ssl,Socket tv,Socket core,const Options& o){
             ERR_clear_error();const int count=SSL_read(ssl,buffer.data(),static_cast<int>(buffer.size()));
             if(count>0){
                 const std::span<const std::uint8_t> data(buffer.data(),static_cast<std::size_t>(count));
-                client_frames.consume(data);
+                observe_frames(client_frames,data);
                 to_core.push(Bytes(data.begin(),data.end()));read_want=POLLIN;last_tv_byte=now_ms();
             }else{
                 read_want=tls_retry_event(SSL_get_error(ssl,count),"TV TLS read closed");
@@ -371,7 +381,7 @@ void relay(SSL* ssl,Socket tv,Socket core,const Options& o){
             const int count=static_cast<int>(recv(core,reinterpret_cast<char*>(buffer.data()),static_cast<int>(buffer.size()),0));
             if(count>0){
                 const std::span<const std::uint8_t> data(buffer.data(),static_cast<std::size_t>(count));
-                observed.consume(data);to_tv.push(Bytes(data.begin(),data.end()));last_core_byte=now_ms();
+                observe_frames(observed,data);to_tv.push(Bytes(data.begin(),data.end()));last_core_byte=now_ms();
             }else if(count==0||!would_block())fail(Reason::Transport,"Upstream closed");
         }
     }

@@ -257,3 +257,143 @@ Recovery copies preserve the complete pre-existing dirty bytes under
 current destination to an expected hash. No ARM/IPK, real server, TV/uinput/Luna,
 UID/jail, provisioning, boot, sleep/wake or human acceptance was performed.
 No commit, push, deployment or publication occurred.
+
+## Focused protocol/input/UI/TLS re-review - November 23, 2026
+
+A read-only re-review of `native/src/protocol.cpp`, `input.cpp`, `ui.cpp` and
+`tls.cpp`, their headers, and the related client/ipc/daemon/platform/config/
+render paths checked the current source against the November 11 and November 12
+audit rounds. **All ten prior findings remain fixed and no new correctness,
+security or resource-exhaustion defect was found.** The older HANDOFF note that
+reserved Stop capacity was open is historical: the current `ControlWorker`
+implements reserved Stop priority, coalescing, queued-start cancellation and
+epoch-based in-flight start invalidation.
+
+That review was static source inspection only - no build, test or runtime probe
+was run in it, and no TV or target hardware was involved.
+
+### Low observations (not defects)
+
+- `FrameDecoder::feed()` (`protocol.cpp:62`) uses a 2 MiB budget as a
+  synchronous test convenience; the Client's `consume()` (`client.cpp:248`)
+  uses 256 KiB. Future `feed()` callers should know the larger budget.
+- Unknown Synergy commands disconnect (`protocol.cpp:644`); this fail-closed
+  behavior is intentional.
+- UI text input is ASCII-only (`ui.cpp:443`); a known limitation.
+- UI status comparison uses JSON dump string equality (`ui.cpp:268`); the
+  daemon emits deterministic JSON, so this can only cause a redundant redraw.
+
+### Verification gaps (recorded, not defects)
+
+| Gap | Scope | Status |
+|---|---|---|
+| G1: no automated TLS test for certificate load/chain verification, hostname/IP matching, SNI, handshake, and WANT_READ/WANT_WRITE | `native/src/tls.cpp` | OPEN - follow-up gate |
+| G2: UI sanitizer build not run (sanitizer config disables UI) | `native/tests/ui_regressions.cpp` | OPEN - needs Xvfb + Mesa fixture |
+| G3: target EOF CPU unmeasured (host ~0.001 s CPU over a 0.4 s wait) | `platform.cpp` | PENDING target |
+| G4: 4K text GPU cost unmeasured; host pixel equivalence passed | `render.cpp` | PENDING target |
+| G5: no explicit test of incremental ingress budget near 256 KiB | `client.cpp`, `client_regressions.cpp` | OPEN - low risk |
+
+Host conclusions come from source inspection plus the existing host evidence;
+target GPU, scheduler and physical-input behavior remain speculative until
+measured. The review thread is settled. These gaps are follow-up work, not
+blockers for the v0.4.2 bridge stabilization.
+
+## Production readiness / Synergy 4 Dragon review - November 23, 2026
+
+A read-only production-readiness review covered `native/`, `desktop/input-bridge/`
+and the reverse-engineered Synergy 4 Dragon core (`.ai` research note). Its
+verdict: the 0.4.0 pointer baseline is production verified on hardware; the
+0.4.1 media/controller candidate is host-verified with physical TV acceptance
+still pending; the desktop bridge was flagged on a classic-traffic starvation
+risk; Dragon compatibility is conditional on its "Allow Synergy 1 computers"
+mode.
+
+### Applied in this stabilization pass
+
+- **Classic-traffic starvation (bridge).** `main.cpp` selected `Write::Pad`
+  whenever the controller queue was non-empty, ahead of `Write::Classic`.
+  Added a bounded `PadClassicArbiter` (at most four consecutive controller
+  writes before a classic write at a frame boundary) with host unit coverage.
+  An in-flight TLS write is never preempted. A loopback probe with continuous
+  analog changes and a small receive window showed no regression; the claimed
+  sustained starvation could not be reproduced in that short probe because
+  8 ms sampling produces pads far below the TLS drain rate.
+- **Bridge/native frame-size mismatch.** The bridge accepts 4 MiB frames but
+  `FrameDecoder::MaxFrame` was still 1 MiB, so the 1.5 MiB `DCLP` body that the
+  proxy conformance test forwards would disconnect the native receiver before
+  ignored-body streaming. Raised the native limit to 4 MiB (retained commands
+  still obey the 256 KiB caller budget, ignored bodies stream without
+  allocation) and added a native test proving the 1.5 MiB ignored body streams
+  with zero retained bytes. Updated the outbound-limit test to derive from
+  `MaxFrame` instead of a hard-coded 1 MiB.
+
+### Recorded follow-ups (outside this bridge PR)
+
+| Item | Location | Status |
+|---|---|---|
+| `DKRP` strict 12-byte check may reject Dragon's optional language suffix | `native/src/protocol.cpp:631` | OPEN - allow `p.size() >= 12`, parse first 12 bytes |
+| TLS on port 24800: Dragon Core defaults to TLS, client fails closed | `native/src/protocol.cpp:74` | GATED - verify Dragon compatibility mode emits plaintext Synergy 1.4 |
+| UI text claims "No TLS or clipboard" and no absolute positioning, both implemented | `native/src/ui.cpp:546` | OPEN - make guidance configuration-aware |
+| Hardcoded `libim.so.1.0.0` soname may change on newer webOS | `native/src/input.cpp:27` | OPEN - add soname fallback list |
+| Gamepad sharing is not part of Dragon Core port 24800 | desktop companion | BY DESIGN - custom mTLS bridge remains required |
+| Cluster mDNS/gRPC discovery | Dragon 24801/5353 | OUT OF SCOPE - manual configuration retained |
+
+These are compatibility and documentation follow-ups, not defects in the
+current 0.4.0/0.4.1 code paths. No Dragon binary, real Synergy server, TV or
+controller was contacted; the Dragon analysis is static/reverse-engineered
+evidence, not an interoperability test.
+
+## Focused transport/runtime review - November 23, 2026
+
+A read-only review of `native/src/client.cpp`, `daemon.cpp`, `ipc.cpp`,
+`platform.cpp` and `ls2_transport.cpp` (plus their headers) found **no new
+actionable findings**. The current `client.cpp` hash matches the independently
+reviewed 2026-11-21 version; its small delta is the already-reviewed descriptor
+ownership and shared errno-classification refactor. No earlier fix regressed:
+cancellable reconnect/backoff and eventfd waits, handshake/idle/partial-frame
+and gamepad deadlines, ordered repeat pumping with bounded ingress, the
+shutdown-aware daemon idle wait, UID admission before request-body reads, and
+LS2 request/reply bounds with deadline and cancellation cleanup all hold in
+source.
+
+Fresh host verification in that review: strict Release build (GNU 13.3.0, UI
+disabled) passed; all 8/8 Client regression modes passed (`slice`, `memory`,
+`timer`, `alt`, `release`, `idle`, `overflow`, `byte-limit`); a protected
+core-test copy passed 300 assertions before a DrvFS runtime-path fixture
+restriction stopped the run. The fresh mTLS suite was blocked by fixture-path
+limits (long path exceeded the runtime limit; the shorter project-local path
+could not create Unix sockets) - a fixture-environment failure, not a
+transport assertion failure. Earlier records of 72 process/TCP/IPC assertions
+and 64 mTLS checks were retained rather than rerun.
+
+### Test gaps / target-unverified risk (recorded, not defects)
+
+| Gap | Scope | Status |
+|---|---|---|
+| Successful reconnect end-to-end: backoff growth/reset, active-session drop then re-entry, repeated cleanup, sleep/wake | `client.cpp`, `client_regressions.cpp`, `integration.py` | OPEN - each client mode makes one connection; integration reconnect starts then stops immediately |
+| LS2 lifecycle: timeout/cancel cleanup, connection recovery, helper/bus restart | `ls2_transport.cpp` | OPEN - no fake-runtime host coverage; target evidence covers schema exchange and caller denial |
+| Platform action cancellation: queued Home/Cycle invalidation, Stop during in-flight Luna action | `platform.cpp`, `core_tests.cpp` | OPEN - source-inspected only |
+| Target UID/jail admission matrix, physical Start/Stop lifecycle, real Home/Cycle effects | target runtime | PENDING target |
+
+Host conclusions come from source inspection plus the fresh host runs above;
+target UID/jail, Luna and reconnect behavior remain unverified. The review
+thread is settled. These are follow-up work, not blockers for the v0.4.2
+bridge stabilization.
+
+## Focused desktop-bridge review disposition - November 22, 2026
+
+A focused review of `desktop/input-bridge/main.cpp`, `bridge_wire.hpp` and
+`tests/bridge_wire_test.cpp` at commit `0d6ebf3` produced six findings. Their
+current disposition:
+
+| Review claim | Disposition |
+|---|---|
+| Framer invalid-length test uses a 1 MiB literal | Not reproduced - the test uses `MaxFrameLength + 1` both at `0d6ebf3` and currently |
+| `0xac1` is a malformed IPv4 literal | Not reproduced - it is the top 12 bits of `172.16.0.0/12` (verified numerically); an explanatory comment was added |
+| No test for focus loss during a backpressured TLS write | Valid - added `test_inflight_focus_loss()`; the full `WANT_WRITE` path is covered by a local forced-slow-reader probe |
+| `mark_sent` missing in the coalescing test | Not reproduced in the current test |
+| No Windows listener test | Valid - an MSVC x64 CI job (VS 2022, strict warnings) now builds and tests the bridge |
+| Header comments claim platform headers | Verified the shared gamepad header is pure standard C++; comments clarified |
+
+No product defect from that review remained unaddressed. The review thread is
+settled; these dispositions are recorded here for traceability.

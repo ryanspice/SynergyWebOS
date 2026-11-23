@@ -18,7 +18,7 @@ import threading
 import time
 
 ROOT = Path(__file__).resolve().parents[3]
-EVIDENCE = ROOT / ".ai/evidence/input-0.4.1-implementation-20261113/proxy-verification"
+EVIDENCE = ROOT / ".ai/evidence/input-0.4.2-stabilization-20261122/proxy-verification"
 # The Synergy protocol reference allows messages up to 4 MiB.
 MAX_FRAME = 4 * 1024 * 1024
 checks: list[str] = []
@@ -420,6 +420,8 @@ def main() -> int:
             send_fragments(tv, framed(b"CNOP"))
             check(receive(server, len(framed(b"CNOP"))) == framed(b"CNOP"),
                   "post-focus-loss keepalive response relays unchanged")
+            # Restore a valid fixture before the next session takes focus.
+            write_fixture(fixture, reentry_rows)
 
             # Explicitly close the valid connection and authenticate a fresh mTLS connection.
             tv.close()

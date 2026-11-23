@@ -16,7 +16,10 @@ class FrameDecoder {
     size_t prefix_used_=0,remaining_=0;
     bool discard_ignored_=false,discarding_=false,first_=true;
 public:
-    static constexpr size_t MaxFrame=1024*1024;
+    // Match the protocol's 4 MiB message limit so the desktop bridge can
+    // forward large clipboard frames. Retained commands still obey the caller's
+    // byte budget; ignored bodies (DCLP/CCLP/CSEC) stream without allocation.
+    static constexpr size_t MaxFrame=4u*1024u*1024u;
     explicit FrameDecoder(bool discard_ignored=false):discard_ignored_(discard_ignored){}
     std::vector<Bytes> feed(std::span<const uint8_t>);
     // Emits one owned payload at a time. Budget includes all emitted vector

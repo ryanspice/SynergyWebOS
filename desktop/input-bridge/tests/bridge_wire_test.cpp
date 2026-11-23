@@ -240,6 +240,125 @@ void test_edge_ordering_and_generations() {
           "trigger zero crossing is queued as a discrete edge");
 }
 
+// Models the relay's in-flight TLS write: a sample already taken for
+// transmission must stay byte-for-byte stable when focus is lost, while every
+// unsent sample is discarded.  The full TLS WANT_WRITE path is exercised by a
+// separate slow-reader end-to-end probe.
+void test_inflight_focus_loss() {
+    using bridge_wire::GamepadState;
+    using bridge_wire::PadCoalescer;
+
+    PadCoalescer pads;
+    GamepadState held{};
+    held.connected = true;
+    held.buttons = 0x0001;
+    pads.observe(0, 41, held, 0);
+    const auto inflight = pads.take_next();  // handed to SSL_write, now frozen
+    check(inflight && inflight->state.buttons == 1, "in-flight sample captured before focus loss");
+
+    GamepadState unsent = held;
+    unsent.buttons = 0x0002;
+    pads.observe(1, 41, unsent, 8);
+    pads.focus_lost();
+    check(pads.empty(), "focus loss discards all unsent samples");
+    check(inflight->state.buttons == 1 && inflight->capture == 41 && inflight->slot == 0,
+          "in-flight sample bytes remain unchanged after focus loss");
+    pads.mark_sent(*inflight);  // a completed write is still recorded
+    check(pads.last_sent[0].buttons == 1, "completed in-flight write updates last-sent state");
+
+    // A new capture starts clean; no old-generation state leaks into it.
+    GamepadState reentry{};
+    reentry.connected = true;
+    pads.observe(0, 42, reentry, 16);
+    auto next = pads.take_next();
+    check(next && next->capture == 42, "re-entry emits only the new capture generation");
+}
+
+// Re-review regressions: stale activations must not replay, while safety
+// neutrals must survive pruning even if only one stick axis is involved.
+void test_safety_release_policy() {
+    using bridge_wire::GamepadState;
+    using bridge_wire::PadCoalescer;
+
+    PadCoalescer activation;
+    GamepadState pressed{};
+    pressed.connected = true;
+    pressed.buttons = 1;
+    activation.observe(0, 41, pressed, 0);
+    activation.prune_stale(PadCoalescer::StaleEventMs + 1);
+    check(activation.empty(), "stale initial press must not replay");
+
+    PadCoalescer neutral;
+    GamepadState held{};
+    held.connected = true;
+    held.lx = 15000;
+    neutral.observe(0, 41, held, 0);
+    neutral.mark_sent(neutral.take_next().value());
+    auto released = held;
+    released.lx = 0;
+    neutral.observe(0, 41, released, 8);
+    neutral.prune_stale(509);
+    check(!neutral.empty(), "stale stick neutral must be preserved");
+
+    GamepadState before{};
+    before.connected = true;
+    before.lx = 15000;
+    before.rx = 12000;
+    auto after = before;
+    after.lx = 0;
+    check(PadCoalescer::is_discrete_change(before, after),
+          "left-stick neutral must be discrete even while the right stick is active");
+
+    // Trigger zero crossings are safety releases too.
+    PadCoalescer trigger;
+    GamepadState firing{};
+    firing.connected = true;
+    firing.rt = 255;
+    trigger.observe(0, 41, firing, 0);
+    trigger.mark_sent(trigger.take_next().value());
+    auto released_trigger = firing;
+    released_trigger.rt = 0;
+    trigger.observe(0, 41, released_trigger, 8);
+    trigger.prune_stale(509);
+    check(!trigger.empty(), "stale trigger release must be preserved");
+
+    // A mixed full-state event (release A, press B) must not replay the stale
+    // press while still delivering the release.
+    PadCoalescer mixed;
+    GamepadState a_held{};
+    a_held.connected = true;
+    a_held.buttons = 0x0001;
+    mixed.observe(0, 41, a_held, 0);
+    mixed.mark_sent(mixed.take_next().value());
+    GamepadState mixed_change = a_held;
+    mixed_change.buttons = 0x0002;
+    mixed.observe(0, 41, mixed_change, 8);
+    mixed.prune_stale(509);
+    auto projected = mixed.take_next();
+    check(projected && (projected->state.buttons & 0x0002) == 0,
+          "stale mixed event must not replay a new button press");
+    check(projected && (projected->state.buttons & 0x0001) == 0,
+          "stale mixed event still releases the previously held button");
+}
+
+// Continuous analog motion must not starve classic keyboard/mouse/keepalive
+// frames.  The arbiter yields to classic after a bounded pad burst, and an
+// in-flight write (not represented here) is never preempted by the relay.
+void test_fair_interleaving() {
+    using bridge_wire::PadClassicArbiter;
+    using Choice = PadClassicArbiter::Choice;
+
+    PadClassicArbiter arbiter;
+    for (int i = 0; i < PadClassicArbiter::MaxPadBurst; ++i)
+        check(arbiter.choose(true, true) == Choice::Pad, "pad burst is bounded, not unlimited");
+    check(arbiter.choose(true, true) == Choice::Classic, "classic traffic gets a turn after the pad burst");
+    check(arbiter.pad_burst == 0, "burst counter resets when classic is chosen");
+
+    check(arbiter.choose(true, false) == Choice::Pad, "pad-only traffic continues uninterrupted");
+    check(arbiter.choose(false, true) == Choice::Classic, "classic-only traffic is sent immediately");
+    check(arbiter.choose(false, false) == Choice::None, "idle arbiter chooses no write");
+}
+
 void test_budget_and_staleness() {
     using bridge_wire::GamepadState;
     using bridge_wire::PadCoalescer;
@@ -300,6 +419,9 @@ int main() {
         test_rapid_press_release_edges();
         test_coalescing();
         test_edge_ordering_and_generations();
+        test_inflight_focus_loss();
+        test_safety_release_policy();
+        test_fair_interleaving();
         test_budget_and_staleness();
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';
