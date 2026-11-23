@@ -166,9 +166,13 @@ inline bool is_safety_event(const GamepadState& next, const GamepadState& previo
     return false;
 }
 
-// Kept as the name used by cross-slot ordering and stale pruning: only safety
-// releases are authoritative, not activations.
+// Cross-slot ordering only: a connection activation is delivered before
+// analog-only updates, but it is NOT exempt from stale pruning (see
+// is_safety_event).  Keeping the two policies separate preserves both the
+// established delivery order and the no-stale-replay guarantee.
 inline bool is_authoritative(const GamepadState& next, const GamepadState& previous) {
+    if (next.connected != previous.connected) return true;
+    if (!next.connected) return true;
     return is_safety_event(next, previous);
 }
 
@@ -240,13 +244,14 @@ public:
         queue.push_back({fresh, discrete});
     }
 
-    // Drops aged, non-authoritative events from the front of each slot.  A
-    // stale release/neutral is kept because applying it is always safe.
+    // Drops aged non-safety events from the front of each slot.  A stale
+    // release/neutral is kept because applying it is always safe, but a stale
+    // activation (connect with a held button) must not replay.
     void prune_stale(std::int64_t now) {
         for (std::size_t slot = 0; slot < Slots; ++slot) {
             auto& queue = pending[slot];
             while (!queue.empty() && now - queue.front().sample.captured >= StaleEventMs &&
-                   !is_authoritative(queue.front().sample.state, last_sent[slot])) {
+                   !is_safety_event(queue.front().sample.state, last_sent[slot])) {
                 queue.pop_front();
                 ++dropped_stale;
             }
