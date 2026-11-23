@@ -5,9 +5,11 @@
 #include "synergy/i18n.hpp"
 #include "spice/core.hpp"
 #include <algorithm>
+#include <array>
 #include <unistd.h>
 #include <sys/stat.h>
 #include <sys/socket.h>
+#include <arpa/inet.h>
 #include <poll.h>
 #include <fcntl.h>
 #include <cstdlib>
@@ -22,6 +24,8 @@
 #include <openssl/x509.h>
 #include <openssl/x509v3.h>
 #include <openssl/pem.h>
+#include <openssl/ssl.h>
+#include <openssl/err.h>
 using namespace synergy;
 namespace {
     int checks=0;
@@ -114,6 +118,9 @@ namespace {
     // destructor; nothing is committed or left on disk.
     struct TlsFixture {
         std::string dir,ca,cert,key,other_cert,other_key;
+        std::string ca_pem,server_cert_pem,server_key_pem;
+        std::string wrong_name_cert_pem,wrong_name_key_pem;
+        std::string wrong_ca_pem,wrong_server_cert_pem,wrong_server_key_pem;
         ~TlsFixture(){if(!dir.empty())std::filesystem::remove_all(dir);}
     };
     std::string pem_cert(X509* cert){
@@ -176,6 +183,54 @@ namespace {
         }
         return cert;
     }
+    void add_sans(X509* cert,const std::string& dns,const std::string& ip){
+        GENERAL_NAMES* names=sk_GENERAL_NAME_new_null();
+        if(!names)throw std::runtime_error("fixture SAN");
+        if(!dns.empty()){
+            ASN1_IA5STRING* value=ASN1_IA5STRING_new();
+            GENERAL_NAME* name=GENERAL_NAME_new();
+            if(!value||!name||!ASN1_STRING_set(value,dns.c_str(),-1)){
+                ASN1_IA5STRING_free(value);GENERAL_NAME_free(name);
+                sk_GENERAL_NAME_pop_free(names,GENERAL_NAME_free);
+                throw std::runtime_error("fixture DNS SAN");
+            }
+            GENERAL_NAME_set0_value(name,GEN_DNS,value);
+            sk_GENERAL_NAME_push(names,name);
+        }
+        if(!ip.empty()){
+            ASN1_OCTET_STRING* value=ASN1_OCTET_STRING_new();
+            GENERAL_NAME* name=GENERAL_NAME_new();
+            in_addr address{};
+            if(!value||!name||inet_pton(AF_INET,ip.c_str(),&address)!=1||
+               !ASN1_OCTET_STRING_set(value,
+                    reinterpret_cast<const unsigned char*>(&address),sizeof address)){
+                ASN1_OCTET_STRING_free(value);GENERAL_NAME_free(name);
+                sk_GENERAL_NAME_pop_free(names,GENERAL_NAME_free);
+                throw std::runtime_error("fixture IP SAN");
+            }
+            GENERAL_NAME_set0_value(name,GEN_IPADD,value);
+            sk_GENERAL_NAME_push(names,name);
+        }
+        X509_EXTENSION* extension=X509V3_EXT_i2d(NID_subject_alt_name,0,names);
+        const bool added=extension&&X509_add_ext(cert,extension,-1);
+        X509_EXTENSION_free(extension);
+        sk_GENERAL_NAME_pop_free(names,GENERAL_NAME_free);
+        if(!added)throw std::runtime_error("fixture SAN extension");
+    }
+    X509* cert_from_pem(const std::string& text){
+        BIO* bio=BIO_new_mem_buf(text.data(),static_cast<int>(text.size()));
+        X509* cert=bio?PEM_read_bio_X509(bio,nullptr,nullptr,nullptr):nullptr;
+        BIO_free(bio);
+        if(!cert)throw std::runtime_error("fixture PEM decode");
+        return cert;
+    }
+    EVP_PKEY* key_from_pem(const std::string& text){
+        BIO* bio=BIO_new_mem_buf(text.data(),static_cast<int>(text.size()));
+        EVP_PKEY* key=bio?PEM_read_bio_PrivateKey(bio,nullptr,nullptr,nullptr):nullptr;
+        BIO_free(bio);
+        if(!key)throw std::runtime_error("fixture PEM decode");
+        return key;
+    }
     std::string write_pem(const std::string& dir,const std::string& name,const std::string& text){
         const std::string path=dir+"/"+name;
         const int fd=open(path.c_str(),O_WRONLY|O_CREAT|O_EXCL,0600);
@@ -199,14 +254,48 @@ namespace {
         X509* client=fixture_cert(client_key,"bridge.test",false,ca_key,ca);
         EVP_PKEY* other_key=fixture_key();
         X509* other=fixture_cert(other_key,"bridge.test",false,ca_key,ca);
-        fixture.ca=write_pem(fixture.dir,"ca.pem",pem_cert(ca));
+        fixture.ca_pem=pem_cert(ca);
+        fixture.ca=write_pem(fixture.dir,"ca.pem",fixture.ca_pem);
         fixture.cert=write_pem(fixture.dir,"client.pem",pem_cert(client));
         fixture.key=write_pem(fixture.dir,"client.key",pem_key(client_key));
         fixture.other_cert=write_pem(fixture.dir,"other.pem",pem_cert(other));
         fixture.other_key=write_pem(fixture.dir,"other.key",pem_key(other_key));
+
+        // Server side: trusted chain with both DNS and IP SAN identities.
+        EVP_PKEY* server_key=fixture_key();
+        X509* server=fixture_cert(server_key,"bridge.test",false,ca_key,ca);
+        add_sans(server,"bridge.test","127.0.0.1");
+        if(!X509_sign(server,ca_key,EVP_sha256()))throw std::runtime_error("fixture server signature");
+        fixture.server_cert_pem=pem_cert(server);
+        fixture.server_key_pem=pem_key(server_key);
+
+        // Same trusted CA, but a different identity for mismatch tests.
+        EVP_PKEY* wrong_name_key=fixture_key();
+        X509* wrong_name=fixture_cert(wrong_name_key,"wrong.test",false,ca_key,ca);
+        add_sans(wrong_name,"wrong.test","127.0.0.2");
+        if(!X509_sign(wrong_name,ca_key,EVP_sha256()))throw std::runtime_error("fixture server signature");
+        fixture.wrong_name_cert_pem=pem_cert(wrong_name);
+        fixture.wrong_name_key_pem=pem_key(wrong_name_key);
+
+        // An unrelated CA and a server chain signed only by it.
+        EVP_PKEY* rogue_ca_key=fixture_key();
+        X509* rogue_ca=fixture_cert(rogue_ca_key,"Untrusted CA",true,nullptr,nullptr);
+        EVP_PKEY* rogue_server_key=fixture_key();
+        X509* rogue_server=fixture_cert(rogue_server_key,"bridge.test",false,rogue_ca_key,rogue_ca);
+        add_sans(rogue_server,"bridge.test","127.0.0.1");
+        if(!X509_sign(rogue_server,rogue_ca_key,EVP_sha256()))
+            throw std::runtime_error("fixture server signature");
+        fixture.wrong_ca_pem=pem_cert(rogue_ca);
+        fixture.wrong_server_cert_pem=pem_cert(rogue_server);
+        fixture.wrong_server_key_pem=pem_key(rogue_server_key);
+
         EVP_PKEY_free(ca_key);X509_free(ca);
         EVP_PKEY_free(client_key);X509_free(client);
         EVP_PKEY_free(other_key);X509_free(other);
+        EVP_PKEY_free(server_key);X509_free(server);
+        EVP_PKEY_free(wrong_name_key);X509_free(wrong_name);
+        EVP_PKEY_free(rogue_ca_key);X509_free(rogue_ca);
+        EVP_PKEY_free(rogue_server_key);X509_free(rogue_server);
         return fixture;
     }
     struct BorrowedSockets {
@@ -215,9 +304,131 @@ namespace {
             int fds[2];
             if(socketpair(AF_UNIX,SOCK_STREAM,0,fds)!=0)throw std::runtime_error("fixture socketpair");
             local=fds[0];peer=fds[1];
+            for(int fd:fds){
+                const int flags=fcntl(fd,F_GETFL,0);
+                if(flags<0||fcntl(fd,F_SETFL,flags|O_NONBLOCK)!=0)
+                    throw std::runtime_error("fixture nonblocking socket");
+            }
         }
         ~BorrowedSockets(){if(local>=0)close(local);if(peer>=0)close(peer);}
     };
+    // A real OpenSSL TLS server driven in the same thread as the production
+    // TlsClient. The injected Wait callback advances SSL_accept, so both sides
+    // make genuine progress without threads, sleeps or external sockets.
+    struct TlsServer {
+        std::unique_ptr<SSL_CTX,decltype(&SSL_CTX_free)> context{nullptr,SSL_CTX_free};
+        std::unique_ptr<SSL,decltype(&SSL_free)> ssl{nullptr,SSL_free};
+        bool accepted=false,verify_ok=false,peer_certificate=false;
+        int version=0;
+        std::string sni,last_error;
+        Bytes received,reply=b("PONG");
+        bool reply_sent=false;
+        TlsServer(int fd,const std::string& certificate,const std::string& key,
+                  const std::string& client_ca,bool require_client=true,int max_version=0){
+            context.reset(SSL_CTX_new(TLS_server_method()));
+            if(!context)throw std::runtime_error("server context");
+            if(max_version&&SSL_CTX_set_max_proto_version(context.get(),max_version)!=1)
+                throw std::runtime_error("server max version unsupported");
+            X509* cert=cert_from_pem(certificate);
+            EVP_PKEY* private_key=key_from_pem(key);
+            const bool configured=SSL_CTX_use_certificate(context.get(),cert)==1&&
+                SSL_CTX_use_PrivateKey(context.get(),private_key)==1&&
+                SSL_CTX_check_private_key(context.get())==1;
+            X509_free(cert);EVP_PKEY_free(private_key);
+            if(!configured)throw std::runtime_error("server certificate setup");
+            X509* ca=cert_from_pem(client_ca);
+            const bool stored=X509_STORE_add_cert(SSL_CTX_get_cert_store(context.get()),ca)==1;
+            X509_free(ca);
+            if(!stored)throw std::runtime_error("server CA setup");
+            SSL_CTX_set_verify(context.get(),
+                require_client?(SSL_VERIFY_PEER|SSL_VERIFY_FAIL_IF_NO_PEER_CERT):SSL_VERIFY_NONE,
+                nullptr);
+            ssl.reset(SSL_new(context.get()));
+            if(!ssl||SSL_set_fd(ssl.get(),fd)!=1)throw std::runtime_error("server stream");
+            SSL_set_accept_state(ssl.get());
+        }
+        void record(){
+            version=SSL_version(ssl.get());
+            verify_ok=SSL_get_verify_result(ssl.get())==X509_V_OK;
+            peer_certificate=SSL_get0_peer_certificate(ssl.get())!=nullptr;
+            const char* name=SSL_get_servername(ssl.get(),TLSEXT_NAMETYPE_host_name);
+            sni=name?name:"";
+        }
+        void pump(){
+            if(accepted)return;
+            ERR_clear_error();
+            const int result=SSL_accept(ssl.get());
+            if(result==1){accepted=true;record();return;}
+            const int error=SSL_get_error(ssl.get(),result);
+            if(error==SSL_ERROR_WANT_READ||error==SSL_ERROR_WANT_WRITE)return;
+            last_error="server accept failed";
+            throw std::runtime_error(last_error);
+        }
+        void finish(int limit=64){
+            for(int step=0;step<limit&&!accepted;++step)pump();
+        }
+        void read_once(){
+            ERR_clear_error();
+            std::array<uint8_t,128> buffer{};
+            const int count=SSL_read(ssl.get(),buffer.data(),static_cast<int>(buffer.size()));
+            if(count>0){received.assign(buffer.begin(),buffer.begin()+count);return;}
+            const int error=SSL_get_error(ssl.get(),count);
+            if(error==SSL_ERROR_WANT_READ||error==SSL_ERROR_WANT_WRITE)return;
+            throw std::runtime_error("server read failed");
+        }
+        void write_reply(){
+            if(reply_sent)return;
+            ERR_clear_error();
+            const int count=SSL_write(ssl.get(),reply.data(),static_cast<int>(reply.size()));
+            if(count>0){reply_sent=true;return;}
+            const int error=SSL_get_error(ssl.get(),count);
+            if(error==SSL_ERROR_WANT_READ||error==SSL_ERROR_WANT_WRITE)return;
+            throw std::runtime_error("server write failed");
+        }
+    };
+    struct HandshakeOutcome {
+        bool client_ok=false;
+        bool payload_ok=false;
+        std::string error,client_payload;
+        int wait_calls=0;
+        std::vector<short> wait_events;
+    };
+    HandshakeOutcome run_tls(TlsServer& server,int client_fd,const Config& config){
+        HandshakeOutcome outcome;
+        TlsClient::Wait wait=[&](short event,int64_t deadline){
+            outcome.wait_events.push_back(event);
+            if(++outcome.wait_calls>128)throw std::runtime_error("handshake pump bound exceeded");
+            if(synergy::monotonic_ms()>deadline)throw std::runtime_error("handshake deadline exhausted");
+            if(!server.accepted)server.pump();
+        };
+        try{
+            TlsClient client(client_fd,config,wait);
+            outcome.client_ok=true;
+            server.finish();
+            const Bytes ping=b("PING");
+            client.send(std::span<const uint8_t>(ping.data(),ping.size()));
+            for(int attempt=0;attempt<8&&server.received.empty();++attempt)server.read_once();
+            for(int attempt=0;attempt<8&&!server.reply_sent;++attempt)server.write_reply();
+            std::array<uint8_t,32> buffer{};
+            const auto count=client.receive(buffer);
+            if(count>0){
+                outcome.client_payload.assign(buffer.begin(),buffer.begin()+static_cast<size_t>(count));
+                outcome.payload_ok=outcome.client_payload=="PONG";
+            }
+        }
+        catch(const std::exception& e){
+            outcome.error=e.what();
+        }
+        return outcome;
+    }
+    bool expected_tls_failure(const std::string& message){
+        for(const char* fragment:{
+            "Authenticated input bridge TLS connection failed",
+            "Input bridge peer authentication failed",
+            "server accept failed","handshake pump bound exceeded","handshake deadline exhausted"})
+            if(message.find(fragment)!=std::string::npos)return true;
+        return false;
+    }
     struct Recorder:Input {
         using E=std::tuple<char,int,int>;
         std::vector<E> events;
@@ -1271,6 +1482,127 @@ namespace {
             }
             check(!std::filesystem::exists(fixture_dir),
                   "ephemeral PKI directory and private keys removed on cleanup");
+        }
+        {
+            // G1 (3b): genuine mTLS handshakes. The real production TlsClient
+            // talks to a real OpenSSL SSL_accept server over a nonblocking
+            // socketpair; the injected Wait advances the server in this thread.
+            TlsFixture fixture=make_tls_fixture();
+            auto tls_config=[&](const std::string& identity){
+                Config config;
+                config.server="127.0.0.1";
+                config.input_bridge=true;
+                config.bridge_ca_file=fixture.ca;
+                config.bridge_cert_file=fixture.cert;
+                config.bridge_key_file=fixture.key;
+                config.bridge_server_name=identity;
+                return config;
+            };
+            const auto trusted_server=[&](int fd){
+                return TlsServer(fd,fixture.server_cert_pem,fixture.server_key_pem,
+                                 fixture.ca_pem,true);
+            };
+            {
+                BorrowedSockets socks;
+                TlsServer server=trusted_server(socks.peer);
+                HandshakeOutcome outcome=run_tls(server,socks.local,tls_config("bridge.test"));
+                check(outcome.client_ok&&outcome.error.empty(),"trusted DNS mTLS handshake succeeds");
+                check(server.accepted,"server completed a real SSL_accept");
+                check(server.verify_ok&&server.peer_certificate,
+                      "server independently verified the client certificate");
+                check(server.version>=TLS1_2_VERSION,
+                      "negotiated TLS version meets the production minimum");
+                check(server.sni=="bridge.test","client sent DNS SNI observed by the server");
+                check(server.received==b("PING")&&outcome.payload_ok,
+                      "application payload exchanged after mutual authentication");
+                check(!outcome.wait_events.empty()&&
+                      std::all_of(outcome.wait_events.begin(),outcome.wait_events.end(),
+                          [](short event){return event==POLLIN||event==POLLOUT;}),
+                      "handshake advanced through injected socket-readiness waits");
+                std::cout<<"tls3b handshake: version="<<server.version
+                         <<" sni="<<server.sni<<" waits=";
+                for(short event:outcome.wait_events)
+                    std::cout<<(event==POLLIN?"IN":event==POLLOUT?"OUT":"?")<<' ';
+                std::cout<<'\n';
+            }
+            {
+                BorrowedSockets socks;
+                TlsServer server=trusted_server(socks.peer);
+                HandshakeOutcome outcome=run_tls(server,socks.local,tls_config("127.0.0.1"));
+                check(outcome.client_ok&&outcome.error.empty(),"trusted IP-SAN mTLS handshake succeeds");
+                check(server.accepted&&server.verify_ok,"IP identity chain and client verified");
+                check(server.sni.empty(),"IP identity does not emit DNS SNI");
+            }
+            {
+                BorrowedSockets socks;
+                TlsServer server(socks.peer,fixture.wrong_server_cert_pem,
+                                 fixture.wrong_server_key_pem,fixture.ca_pem,true);
+                HandshakeOutcome outcome=run_tls(server,socks.local,tls_config("bridge.test"));
+                check(!outcome.client_ok&&expected_tls_failure(outcome.error),
+                      "untrusted server certificate chain is rejected during handshake");
+            }
+            {
+                BorrowedSockets socks;
+                TlsServer server(socks.peer,fixture.wrong_name_cert_pem,
+                                 fixture.wrong_name_key_pem,fixture.ca_pem,true);
+                HandshakeOutcome outcome=run_tls(server,socks.local,tls_config("bridge.test"));
+                check(!outcome.client_ok&&expected_tls_failure(outcome.error),
+                      "valid but incorrectly named server certificate is rejected");
+            }
+            {
+                BorrowedSockets socks;
+                TlsServer server=trusted_server(socks.peer);
+                HandshakeOutcome outcome=run_tls(server,socks.local,tls_config("127.0.0.2"));
+                check(!outcome.client_ok&&expected_tls_failure(outcome.error),
+                      "IP identity mismatch is rejected despite a trusted chain");
+            }
+            {
+                BorrowedSockets socks;
+                TlsServer server(socks.peer,fixture.server_cert_pem,fixture.server_key_pem,
+                                 fixture.wrong_ca_pem,true);
+                HandshakeOutcome outcome=run_tls(server,socks.local,tls_config("bridge.test"));
+                // The client can finishing SSL_connect before the server's
+                // verification alert arrives; the authoritative evidence is
+                // that SSL_accept never completed on the server side.
+                check(!server.accepted&&!server.verify_ok&&server.received.empty()&&
+                      outcome.error.find("server accept failed")!=std::string::npos,
+                      "server rejects a client certificate from an untrusted CA");
+            }
+            {
+                BorrowedSockets socks;
+                TlsServer server=trusted_server(socks.peer);
+                Config missing=tls_config("bridge.test");
+                missing.bridge_key_file.clear();
+                HandshakeOutcome outcome=run_tls(server,socks.local,missing);
+                check(!outcome.client_ok&&outcome.error.find("Read state")!=std::string::npos,
+                      "missing client credentials fail before any TLS handshake");
+                check(server.received.empty(),"no payload is sent after credential failure");
+            }
+            {
+                // Version-mismatch fixture: only meaningful if this OpenSSL
+                // still permits a TLS 1.1-only server context.
+                std::string setup_error;
+                BorrowedSockets socks;
+                std::unique_ptr<TlsServer> server;
+                try{
+                    server=std::make_unique<TlsServer>(socks.peer,fixture.server_cert_pem,
+                        fixture.server_key_pem,fixture.ca_pem,true,TLS1_1_VERSION);
+                }
+                catch(const std::exception& e){
+                    setup_error=e.what();
+                }
+                if(setup_error.find("server max version unsupported")!=std::string::npos){
+                    std::cout<<"tls3b version fixture: BLOCKED ("<<setup_error<<")\n";
+                    check(true,"TLS 1.1-only peer fixture unavailable on this OpenSSL (BLOCKED)");
+                }
+                else{
+                    check(setup_error.empty(),"TLS 1.1-only peer fixture configured");
+                    HandshakeOutcome outcome=run_tls(*server,socks.local,tls_config("bridge.test"));
+                    std::cout<<"tls3b version fixture: observed failure="<<outcome.error<<'\n';
+                    check(!outcome.client_ok&&expected_tls_failure(outcome.error),
+                          "peer restricted below TLS 1.2 cannot negotiate");
+                }
+            }
         }
         // Deterministic malformed-packet stress, no native input backend involved.
         std::mt19937 random(42);
