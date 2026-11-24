@@ -131,6 +131,35 @@ inline Bytes framed(std::span<const std::uint8_t> payload) {
     return data;
 }
 
+// Number of leading bytes of `data` that can be written to the TV now while
+// guaranteeing the write ends on a classic frame boundary whenever `data`
+// contains one.  The controller and classic paths share one TLS byte stream,
+// so a controller packet may only be inserted between classic frames; this is
+// the scheduling opportunity the arbiter needs.
+//
+// The framer is copied and advanced over at most `data.size()` bytes, so the
+// helper is pure (the caller's delivered-framer is untouched), bounded and
+// retains no payload.  A frame larger than `data` simply yields `data.size()`
+// and the caller writes another chunk next turn; a partial length prefix or a
+// frame split across receive chunks is handled because the probe starts from
+// the real incremental state.  A malformed length raises FrameError exactly as
+// the delivered-framer would.
+inline std::size_t classic_write_to_boundary(const Framer& framer,
+                                             std::span<const std::uint8_t> data) {
+    Framer probe = framer;
+    std::size_t count = 0;
+    for (auto byte : data) {
+        probe.consume(std::span<const std::uint8_t>(&byte, 1));
+        ++count;
+        // Stop at the first frame boundary reached after writing at least one
+        // byte.  Starting mid-frame yields the rest of that frame; starting at
+        // a boundary yields exactly one whole frame.  A frame larger than
+        // `data` never reaches a boundary and returns data.size().
+        if (probe.boundary()) break;
+    }
+    return count;
+}
+
 using GamepadState = synergy::bridge::GamepadState;
 inline constexpr std::size_t Slots = synergy::bridge::Slots;
 

@@ -257,6 +257,11 @@ void relay(SSL* ssl,Socket tv,Socket core,const Options& o){
 
     enum class Write { None,Classic,Pad };Write pending=Write::None;
     bool write_ready=true;short read_want=POLLIN,write_want=POLLOUT;
+    // A classic write length is frozen when the write is selected and stays
+    // fixed across OpenSSL WANT_READ/WANT_WRITE retries.  The delivered framer
+    // and to_tv queue do not change while a write is pending, so neither the
+    // buffer address nor its contents move under the in-flight operation.
+    std::size_t classic_len=0;
     std::int64_t next_sample=0;
     std::int64_t tv_progress=now_ms(),core_progress=now_ms();
     std::int64_t partial_since=0,client_partial_since=0;
@@ -323,6 +328,11 @@ void relay(SSL* ssl,Socket tv,Socket core,const Options& o){
                     inflight=Inflight{*sample,framed(*encoded)};
                     write_ready=true;pending=Write::Pad;
                 }else if(choice==bridge_wire::PadClassicArbiter::Choice::Classic){
+                    // Expose the next classic frame boundary as the scheduling
+                    // opportunity so sustained classic traffic cannot keep the
+                    // delivered framer permanently mid-frame and starve the
+                    // controller path.  The length is frozen for this write.
+                    classic_len=bridge_wire::classic_write_to_boundary(delivered,to_tv.front());
                     pending=Write::Classic;write_ready=true;
                 }
             }
@@ -331,7 +341,8 @@ void relay(SSL* ssl,Socket tv,Socket core,const Options& o){
         // WritePending: attempt once, then wait for the requested readiness
         // instead of retrying a backpressured socket on every loop iteration.
         if(pending!=Write::None&&write_ready){
-            const auto data=pending==Write::Pad?std::span<const std::uint8_t>(inflight->bytes):to_tv.front();
+            const auto data=pending==Write::Pad?std::span<const std::uint8_t>(inflight->bytes)
+                :to_tv.front().subspan(0,classic_len);
             ERR_clear_error();const int rc=SSL_write(ssl,data.data(),static_cast<int>(data.size()));
             if(rc>0){
                 if(static_cast<std::size_t>(rc)!=data.size())fail(Reason::Tls,"Unexpected partial TLS write");
@@ -388,7 +399,14 @@ void relay(SSL* ssl,Socket tv,Socket core,const Options& o){
 }
 
 void session(SSL_CTX* ctx,Socket tv,const Options& o){
-    nonblocking(tv);Stream ssl(SSL_new(ctx),SSL_free);
+    nonblocking(tv);
+    // Bound the TV send buffer so a slow reader applies TCP backpressure
+    // instead of the kernel absorbing an unbounded backlog.  This keeps the
+    // relay within a small in-flight window and lets controller arbitration
+    // interleave with classic delivery at the reader's pace.
+    int send_buffer=16384;
+    setsockopt(tv,SOL_SOCKET,SO_SNDBUF,reinterpret_cast<const char*>(&send_buffer),static_cast<AddressLength>(sizeof(send_buffer)));
+    Stream ssl(SSL_new(ctx),SSL_free);
     if(!ssl||static_cast<std::uint64_t>(tv)>static_cast<std::uint64_t>(std::numeric_limits<int>::max())||SSL_set_fd(ssl.get(),static_cast<int>(tv))!=1)
         fail(Reason::Tls,"Cannot create TV TLS stream");
     authenticate(ssl.get(),o,tv);

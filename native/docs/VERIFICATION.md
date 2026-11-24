@@ -397,3 +397,55 @@ current disposition:
 
 No product defect from that review remained unaddressed. The review thread is
 settled; these dispositions are recorded here for traceability.
+
+## Batch 4a — sustained bidirectional fairness recovery - November 24, 2026
+
+The sustained mixed-traffic regression (`desktop/input-bridge/tests/proxy_sustained.py`)
+reproduced a production-path starvation defect against baseline `c7bfdef`: the
+actual proxy delivered all 512 classic frames and relayed all 96 upstream frames
+but delivered only the four initial controller frames (zero during the flood)
+despite thousands of successful fixture updates. The arbiter required
+`delivered.boundary()`, while classic TLS writes consumed arbitrary receive
+chunks that rarely ended on a frame boundary, so sustained classic traffic kept
+the delivered framer permanently mid-frame and controller arbitration never
+became eligible.
+
+Fix (commit `fix(input-bridge): arbitrate controller writes at classic frame
+boundaries`):
+
+- `bridge_wire.hpp`: added the pure, bounded `classic_write_to_boundary()` helper.
+  It copies the incremental framer, advances it over the queued bytes, and
+  returns the length up to the next legal frame boundary. Partial length
+  prefixes, payloads split across chunks, several frames in one chunk, and frames
+  larger than the queue budget are all handled without retaining a payload.
+- `main.cpp`: the classic write now uses the frozen boundary length instead of
+  the whole receive chunk, so `delivered.boundary()` becomes a reachable
+  scheduling point and the arbiter grants the controller a bounded turn. The
+  length is frozen across OpenSSL WANT_READ/WANT_WRITE retries. The TV socket
+  send buffer is bounded (`SO_SNDBUF` 16 KiB) so a slow reader applies real TCP
+  backpressure instead of an unbounded kernel backlog.
+- `bridge_wire_test.cpp`: added `test_classic_write_to_boundary()` covering
+  whole frames, multiple frames per chunk, split prefixes, split payloads,
+  non-divisible sizes, a 4 MiB streamed frame, and malformed lengths.
+
+Verification (WSL `WebOSBuild`, GCC 13.3, OpenSSL 3.0.13, real loopback TLS):
+
+- Strict Release native build + CTest: **15/15** passed.
+- ASan/UBSan native build + CTest: **14/14** passed (the separate 1,032-byte
+  `libdbus` leak reproduces on the untouched baseline).
+- `bridge-wire-test`: **349** checks passed (was 78).
+- `proxy_loopback.py`: **95** checks passed.
+- `proxy_sustained.py` (production proxy, real authenticated TLS, synthetic Core
+  and four-slot fixtures): **PASS 5/5** before/after; 140 controller frames, 34
+  classic/controller alternations, max controller burst 4, max classic progress
+  gap ~0.22 s. ASan build: **PASS** (184 pads).
+- Regression validity: the old whole-chunk classic write fails the same
+  regression (4 pads, 0 alternations) even with the bounded buffer, and the
+  baseline fails at the contention assertion; the corrected implementation
+  passes. Mutation checks confirm both the frame-boundary helper and the bounded
+  buffer are necessary.
+
+Remaining limitations: host loopback timings are observations, not a target
+latency bound; no physical TV, controller, live Synergy server, driver or
+installed service was exercised; PC-side controller suppression and physical
+acceptance remain separate gates. Batch 4b (reconnect) is not started.
