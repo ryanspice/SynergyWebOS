@@ -397,3 +397,95 @@ current disposition:
 
 No product defect from that review remained unaddressed. The review thread is
 settled; these dispositions are recorded here for traceability.
+
+## Batch 4a — sustained bidirectional fairness recovery - November 24, 2026
+
+The sustained mixed-traffic regression (`desktop/input-bridge/tests/proxy_sustained.py`)
+reproduced a production-path starvation defect against baseline `c7bfdef`: the
+actual proxy delivered all 512 classic frames and relayed all 96 upstream frames
+but delivered only the four initial controller frames (zero during the flood)
+despite thousands of successful fixture updates. The arbiter required
+`delivered.boundary()`, while classic TLS writes consumed arbitrary receive
+chunks that rarely ended on a frame boundary, so sustained classic traffic kept
+the delivered framer permanently mid-frame and controller arbitration never
+became eligible.
+
+Fix (commit `fix(input-bridge): arbitrate controller writes at classic frame
+boundaries`):
+
+- `bridge_wire.hpp`: added the pure, bounded `classic_write_to_boundary()` helper.
+  It copies the incremental framer, advances it over the queued bytes, and
+  returns the length up to the next legal frame boundary. Partial length
+  prefixes, payloads split across chunks, several frames in one chunk, and frames
+  larger than the queue budget are all handled without retaining a payload.
+- `main.cpp`: the classic write now uses the frozen boundary length instead of
+  the whole receive chunk, so `delivered.boundary()` becomes a reachable
+  scheduling point and the arbiter grants the controller a bounded turn. The
+  length is frozen across OpenSSL WANT_READ/WANT_WRITE retries and checked. The TV
+  socket send buffer is requested at `SO_SNDBUF` 16 KiB (best effort; the
+  effective size is read back and logged) so a slow reader applies real TCP
+  backpressure instead of an unbounded kernel backlog.
+- `bridge_wire_test.cpp`: added `test_classic_write_to_boundary()` covering
+  whole frames, multiple frames per chunk, split prefixes, split payloads,
+  non-divisible sizes, a 4 MiB streamed frame, and malformed lengths.
+
+Verification (WSL `WebOSBuild`, GCC 13.3, OpenSSL 3.0.13, real loopback TLS):
+
+- Strict Release native build + CTest: **15/15** passed.
+- ASan/UBSan native build + CTest: **14/14** passed (the separate 1,032-byte
+  `libdbus` leak reproduces on the untouched baseline).
+- `bridge-wire-test`: **349** checks passed (was 78).
+- `proxy_loopback.py`: **95** checks passed.
+- `proxy_sustained.py` (production proxy, real authenticated TLS, synthetic Core
+  and four-slot fixtures): **PASS 5/5** before/after; 140 controller frames, 34
+  classic/controller alternations, max controller burst 4, max classic progress
+  gap ~0.22 s. ASan build: **PASS** (184 pads).
+- Regression validity: the old whole-chunk classic write fails the same
+  regression (4 pads, 0 alternations) even with the bounded buffer, and the
+  baseline fails at the contention assertion; the corrected implementation
+  passes. Mutation checks confirm both the frame-boundary helper and the bounded
+  buffer are necessary.
+
+Remaining limitations: host loopback timings are observations, not a target
+latency bound; no physical TV, controller, live Synergy server, driver or
+installed service was exercised; PC-side controller suppression and physical
+acceptance remain separate gates. Batch 4b (reconnect) is not started.
+
+### Batch 4a acceptance closeout - November 24, 2026
+
+PR #20 was held for a small, focused closeout before merge readiness:
+
+- **CI registration.** `proxy_sustained.py` now runs in the Linux `bridge` CI
+  job. The step is bounded twice: an outer `timeout --signal=TERM
+  --kill-after=15s 180s`, and the fixture's own 90 s overall `SIGALRM`
+  deadline. Output is streamed through `tee` to a preserved log and the JSON
+  verdict is re-printed on failure, so a red run stays diagnosable. The job
+  timeout rose from 15 to 20 minutes.
+- **`SO_SNDBUF` is best effort.** The request result is now checked, the
+  effective value is read back with `getsockopt` and logged, and a refused
+  request is a hardening loss rather than a session failure. Linux reports
+  32,768 for a 16,384 request (kernels double it), which is why documentation no
+  longer calls 16 KiB a guaranteed limit.
+- **Frozen retry invariant is now verified, not assumed.** The selected classic
+  address, length and bytes are retained; a byte copy bounded by one receive
+  chunk is compared on every retry and a mismatch fails with `TLS`. The harness
+  proves the path ran live (31 classic WANT retries in the accepted run) while
+  new classic data kept queuing behind the frozen write (peak queue 65,536
+  bytes, the exact budget).
+- **Fixture boundedness.** The overall `SIGALRM` deadline interrupts the main
+  thread even inside a blocking socket call, `finally` cleanup still runs, and
+  every helper thread is joined through a bounded, asserted helper instead of a
+  bare `join`.
+- **Cost and write-call observations.** The proxy reports per-session counters
+  (`Relay stats: classic_writes= controller_writes= tls_retries=
+  classic_write_retries= peak_queue_bytes=`), and the fixture records proxy CPU
+  seconds and classic wire bytes/second. Arbitration semantics are unchanged.
+- **RED result preserved.** The whole-chunk-writer control still fails the
+  regression with 4 pads and 0 alternations, even with the bounded buffer;
+  evidence stays in `.ai/evidence/input-bridge-sustained-fairness/`.
+
+Accepted run (GCC 13.3, OpenSSL 3.0.13, release build, WSL host): `PASS`,
+512/512 classic frames, 144+ controller frames, 35 alternations, max controller
+burst 4, max classic gap 0.22 s, proxy CPU 0.12-0.25 s over a ~13 s contention
+phase (~40 KB/s), clean teardown and no stale frames. CI is the authority for the
+final verdict; these host numbers remain observations.

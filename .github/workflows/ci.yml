@@ -7,8 +7,9 @@
 #   3. build-test   — legacy web 0.3.4 build/package + suite on Windows. It is
 #                     migration source, not the native 0.4.0 artifact.
 #   4. native       — native C++20 Release + CTest and ASan/UBSan on Linux.
-#   5. bridge       — desktop input bridge build, CTest and synthetic mTLS
-#                     loopback checks, independent of the native core job.
+#   5. bridge       — desktop input bridge build, CTest, synthetic mTLS
+#                     loopback checks and the bounded sustained fairness
+#                     regression against the production proxy.
 #   6. bridge-windows — MSVC x64 bridge compile + CTest (Windows capture target).
 #
 # Live TV/PC checks are NOT part of CI. They require a rooted TV and the live
@@ -168,7 +169,7 @@ jobs:
   bridge:
     name: Desktop input bridge (Linux fixtures)
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     env:
       PYTHONUTF8: '1'
     steps:
@@ -197,6 +198,28 @@ jobs:
           trap 'rm -rf -- "$fixture_root"' EXIT
           TMPDIR="$fixture_root" \
             python3 desktop/input-bridge/tests/proxy_loopback.py desktop/input-bridge/build/ci/synergy-input-bridge
+
+      # Production-path fairness regression (Batch 4a).  Bounded by an outer
+      # `timeout` and the fixture's own overall deadline; the JSON verdict and
+      # the preserved log are printed on failure so a red run stays diagnosable.
+      - name: Run sustained fairness regression (production proxy)
+        run: |
+          fixture_root="$(mktemp -d /tmp/syb043.XXXXXX)"
+          trap 'rm -rf -- "$fixture_root"' EXIT
+          log="$RUNNER_TEMP/proxy-sustained.log"
+          result="$RUNNER_TEMP/proxy-sustained-result.json"
+          set +e
+          TMPDIR="$fixture_root" timeout --signal=TERM --kill-after=15s 180s \
+            python3 -u desktop/input-bridge/tests/proxy_sustained.py \
+              desktop/input-bridge/build/ci/synergy-input-bridge "$result" 2>&1 | tee "$log"
+          status="${PIPESTATUS[0]}"
+          set -e
+          if [ "$status" -ne 0 ]; then
+            echo "::error::sustained fairness regression failed (exit $status, outer deadline 180s)"
+            cat "$log"
+            if [ -f "$result" ]; then cat "$result"; fi
+            exit "$status"
+          fi
 
   bridge-windows:
     name: Desktop input bridge (MSVC x64)

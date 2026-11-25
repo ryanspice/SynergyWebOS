@@ -504,6 +504,112 @@ void test_ingress_and_budget_boundaries() {
     check(timing.empty() && timing.dropped_stale == 1,
           "event exactly at the stale threshold is pruned");
 }
+
+// Frame-boundary scheduling: the classic writer must stop at a legal protocol
+// frame boundary so the arbiter can insert a controller packet between frames
+// without ever splitting one.  These cases are pure and deterministic; no
+// sockets, clocks or OpenSSL are involved.
+void test_classic_write_to_boundary() {
+    using bridge_wire::classic_write_to_boundary;
+    using bridge_wire::Framer;
+
+    // A whole frame starting at a boundary yields exactly that one frame.
+    {
+        Framer f;
+        const auto frame = bridge_wire::framed(body(1024, 1));
+        check(classic_write_to_boundary(f, frame) == frame.size(),
+              "a whole frame at a boundary is written up to the next boundary");
+        f.consume(frame);
+        check(f.boundary(), "the delivered framer reaches the boundary after the frame");
+    }
+
+    // Multiple frames in one chunk stop after the first frame.
+    {
+        Framer f;
+        const auto a = bridge_wire::framed(body(100, 2));
+        const auto b = bridge_wire::framed(body(200, 3));
+        bridge_wire::Bytes both = a;
+        both.insert(both.end(), b.begin(), b.end());
+        check(classic_write_to_boundary(f, both) == a.size(),
+              "a chunk with several frames stops at the first boundary");
+    }
+
+    // A frame split across receive chunks: a partial prefix then the rest.
+    {
+        Framer f;
+        const auto frame = bridge_wire::framed(body(300, 4));
+        bridge_wire::Bytes first(frame.begin(), frame.begin() + 2);  // partial prefix
+        check(classic_write_to_boundary(f, first) == first.size(),
+              "a partial length prefix is written whole without a false boundary");
+        f.consume(first);
+        check(!f.boundary(), "the framer is mid-prefix after the partial write");
+        bridge_wire::Bytes rest(frame.begin() + 2, frame.end());
+        check(classic_write_to_boundary(f, rest) == rest.size(),
+              "the remainder of a split frame completes to the boundary");
+        f.consume(rest);
+        check(f.boundary(), "the split frame reaches a boundary when completed");
+    }
+
+    // A frame split mid-payload across chunks.
+    {
+        Framer f;
+        const auto frame = bridge_wire::framed(body(500, 5));
+        bridge_wire::Bytes head(frame.begin(), frame.begin() + 4 + 100);
+        check(classic_write_to_boundary(f, head) == head.size(),
+              "a partial payload is written without a false boundary");
+        f.consume(head);
+        bridge_wire::Bytes tail(frame.begin() + 4 + 100, frame.end());
+        check(classic_write_to_boundary(f, tail) == tail.size(),
+              "the final payload completes exactly at the boundary");
+    }
+
+    // Non-divisible frame and chunk sizes never split a frame.
+    {
+        Framer f;
+        const auto frame = bridge_wire::framed(body(1023, 6));  // 1027 wire bytes
+        bridge_wire::Bytes chunk(frame.begin(), frame.begin() + 1000);
+        check(classic_write_to_boundary(f, chunk) == chunk.size(),
+              "a non-divisible chunk smaller than a frame is written whole");
+        f.consume(chunk);
+        bridge_wire::Bytes rest(frame.begin() + 1000, frame.end());
+        check(classic_write_to_boundary(f, rest) == rest.size(),
+              "the non-divisible remainder completes at the boundary");
+    }
+
+    // A legal frame larger than the queued bytes streams without retention and
+    // never reports a false boundary; the caller writes another chunk next turn.
+    {
+        Framer f;
+        const auto big = bridge_wire::framed(body(bridge_wire::MaxFrameLength, 7));
+        const std::size_t chunk = 16384;
+        std::size_t total = 0;
+        while (total < big.size()) {
+            const auto end = std::min(big.size(), total + chunk);
+            const std::span<const std::uint8_t> whole(big);
+            const auto part = whole.subspan(total, end - total);
+            const auto n = classic_write_to_boundary(f, part);
+            check(n == part.size(),
+                  "a large frame chunk smaller than the frame is written whole");
+            f.consume(part);
+            total += n;
+        }
+        check(f.boundary(), "a 4 MiB frame streams to a boundary without retention");
+        check(f.head.size() == 14, "streaming a large frame keeps only the 14-byte head");
+    }
+
+    // A malformed length raises the same typed error the delivered framer would.
+    {
+        Framer f;
+        bridge_wire::Bytes bad{0, 0, 0, 3, 1, 2, 3};  // length 3 < 4
+        bool rejected = false;
+        try {
+            classic_write_to_boundary(f, bad);
+        } catch (const bridge_wire::FrameError&) {
+            rejected = true;
+        }
+        check(rejected, "a malformed length is rejected by the boundary helper");
+    }
+}
 }  // namespace
 
 int main() {
@@ -519,6 +625,7 @@ int main() {
         test_fair_interleaving();
         test_budget_and_staleness();
         test_ingress_and_budget_boundaries();
+        test_classic_write_to_boundary();
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';
         return 1;

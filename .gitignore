@@ -202,6 +202,9 @@ native/build/
 native/dist/
 native/bin/
 
+# Desktop input-bridge development build output.
+desktop/input-bridge/build/
+
 # Native app assets are authored inputs, not private captures.
 !native/icon.png
 !native/icon-large.png

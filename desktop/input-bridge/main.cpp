@@ -6,6 +6,7 @@
 #include <array>
 #include <atomic>
 #include <chrono>
+#include <cstddef>
 #include <csignal>
 #include <cstdint>
 #include <cstring>
@@ -255,8 +256,30 @@ void relay(SSL* ssl,Socket tv,Socket core,const Options& o){
     struct Inflight { PadSample sample; Bytes bytes; };
     std::optional<Inflight> inflight;
 
+    // Session diagnostics: write-call and retry counts plus peak queue depth.
+    // Printed once when the session ends, including on failure, so hosts and
+    // fixtures can record CPU/write behaviour without a profiler.
+    struct Stats {
+        unsigned long long classic_writes=0,pad_writes=0,tls_retries=0,classic_retries=0;
+        std::size_t peak_queue=0;
+        ~Stats(){
+            std::cerr<<"Relay stats: classic_writes="<<classic_writes<<" controller_writes="<<pad_writes
+                <<" tls_retries="<<tls_retries<<" classic_write_retries="<<classic_retries
+                <<" peak_queue_bytes="<<peak_queue<<'\n';
+        }
+    } stats;
+
     enum class Write { None,Classic,Pad };Write pending=Write::None;
     bool write_ready=true;short read_want=POLLIN,write_want=POLLOUT;
+    // A classic write length is frozen when the write is selected and stays
+    // fixed across OpenSSL WANT_READ/WANT_WRITE retries.  The delivered framer
+    // and to_tv queue do not change while a write is pending, so neither the
+    // buffer address nor its contents move under the in-flight operation.  The
+    // frozen bytes are kept (bounded by one receive chunk) purely so the
+    // invariant is checked on every retry instead of being assumed.
+    std::size_t classic_len=0;
+    const std::uint8_t* classic_data=nullptr;
+    Bytes classic_frozen;
     std::int64_t next_sample=0;
     std::int64_t tv_progress=now_ms(),core_progress=now_ms();
     std::int64_t partial_since=0,client_partial_since=0;
@@ -305,6 +328,7 @@ void relay(SSL* ssl,Socket tv,Socket core,const Options& o){
 
         if(pending==Write::None&&to_tv.empty()&&pads.empty()&&!inflight)tv_progress=now;
         if(to_core.empty())core_progress=now;
+        stats.peak_queue=std::max(stats.peak_queue,to_tv.bytes);
         if(now-tv_progress>=bridge_wire::RelayProgressMs||now-core_progress>=bridge_wire::RelayProgressMs)
             fail(Reason::Backpressure,"Relay transport progress deadline");
 
@@ -323,6 +347,16 @@ void relay(SSL* ssl,Socket tv,Socket core,const Options& o){
                     inflight=Inflight{*sample,framed(*encoded)};
                     write_ready=true;pending=Write::Pad;
                 }else if(choice==bridge_wire::PadClassicArbiter::Choice::Classic){
+                    // Expose the next classic frame boundary as the scheduling
+                    // opportunity so sustained classic traffic cannot keep the
+                    // delivered framer permanently mid-frame and starve the
+                    // controller path.  The length, address and bytes are frozen
+                    // for this write so a retry can never re-derive a different
+                    // operation from newer queue contents.
+                    const auto front=to_tv.front();
+                    classic_len=bridge_wire::classic_write_to_boundary(delivered,front);
+                    classic_data=front.data();
+                    classic_frozen.assign(front.begin(),front.begin()+static_cast<std::ptrdiff_t>(classic_len));
                     pending=Write::Classic;write_ready=true;
                 }
             }
@@ -331,7 +365,18 @@ void relay(SSL* ssl,Socket tv,Socket core,const Options& o){
         // WritePending: attempt once, then wait for the requested readiness
         // instead of retrying a backpressured socket on every loop iteration.
         if(pending!=Write::None&&write_ready){
-            const auto data=pending==Write::Pad?std::span<const std::uint8_t>(inflight->bytes):to_tv.front();
+            std::span<const std::uint8_t> data;
+            if(pending==Write::Pad){
+                data=std::span<const std::uint8_t>(inflight->bytes);++stats.pad_writes;
+            }else{
+                data=to_tv.front().subspan(0,classic_len);++stats.classic_writes;
+                // Verify the retry invariant rather than trusting it: the same
+                // address, length and bytes must survive every retry even while
+                // further classic data queues behind this write.
+                if(data.data()!=classic_data||data.size()!=classic_len||
+                   !std::equal(classic_frozen.begin(),classic_frozen.end(),data.begin()))
+                    fail(Reason::Tls,"Classic write buffer changed across retry");
+            }
             ERR_clear_error();const int rc=SSL_write(ssl,data.data(),static_cast<int>(data.size()));
             if(rc>0){
                 if(static_cast<std::size_t>(rc)!=data.size())fail(Reason::Tls,"Unexpected partial TLS write");
@@ -339,6 +384,7 @@ void relay(SSL* ssl,Socket tv,Socket core,const Options& o){
                 else{pads.mark_sent(inflight->sample);inflight.reset();}
                 pending=Write::None;write_ready=true;write_want=POLLOUT;tv_progress=now_ms();
             }else{
+                ++stats.tls_retries;if(pending==Write::Classic)++stats.classic_retries;
                 write_want=tls_retry_event(SSL_get_error(ssl,rc),"TV TLS write failed");
                 write_ready=false;
             }
@@ -387,8 +433,29 @@ void relay(SSL* ssl,Socket tv,Socket core,const Options& o){
     }
 }
 
+// SO_SNDBUF is best effort: the kernel may refuse the request, round it up or
+// (on Linux) double it, so the effective size is read back and reported instead
+// of being described as a guaranteed limit.  Failure to bound the buffer is a
+// hardening loss, not a session failure.
+void bound_send_buffer(Socket tv){
+    constexpr int Requested=16384;
+    if(setsockopt(tv,SOL_SOCKET,SO_SNDBUF,reinterpret_cast<const char*>(&Requested),static_cast<AddressLength>(sizeof(Requested)))!=0){
+        std::cerr<<"TV send buffer: 16384 request refused; kernel default retained\n";return;
+    }
+    int effective=0;AddressLength length=static_cast<AddressLength>(sizeof(effective));
+    if(getsockopt(tv,SOL_SOCKET,SO_SNDBUF,reinterpret_cast<char*>(&effective),&length)!=0){
+        std::cerr<<"TV send buffer: 16384 request applied; effective size unavailable\n";return;
+    }
+    std::cerr<<"TV send buffer: requested 16384, effective "<<effective<<" bytes (best effort)\n";
+}
 void session(SSL_CTX* ctx,Socket tv,const Options& o){
-    nonblocking(tv);Stream ssl(SSL_new(ctx),SSL_free);
+    nonblocking(tv);
+    // Bound the TV send buffer so a slow reader applies TCP backpressure
+    // instead of the kernel absorbing an unbounded backlog.  This keeps the
+    // relay within a small in-flight window and lets controller arbitration
+    // interleave with classic delivery at the reader's pace.
+    bound_send_buffer(tv);
+    Stream ssl(SSL_new(ctx),SSL_free);
     if(!ssl||static_cast<std::uint64_t>(tv)>static_cast<std::uint64_t>(std::numeric_limits<int>::max())||SSL_set_fd(ssl.get(),static_cast<int>(tv))!=1)
         fail(Reason::Tls,"Cannot create TV TLS stream");
     authenticate(ssl.get(),o,tv);

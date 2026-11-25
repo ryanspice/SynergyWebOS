@@ -75,6 +75,30 @@ refresh at least every 100 ms for connected pads. It sends a disconnected neutra
 state on hot-unplug. Outside captured focus it does no controller polling or
 forwarding. Socket waits remain cancellable; no uncontrolled busy loop.
 
+Controller and classic writes share one TLS byte stream, so a controller packet
+may only be inserted between classic frames. The classic writer therefore stops
+at legal protocol frame boundaries rather than at TCP receive-chunk boundaries:
+a pure, bounded helper (`classic_write_to_boundary`) advances a copy of the
+incremental framer over the queued bytes and returns the length up to the next
+frame boundary (a partial length prefix, a payload split across chunks, several
+frames in one chunk, and frames larger than the queue budget are all handled).
+This makes `delivered.boundary()` a reachable scheduling point under sustained
+classic traffic, so the arbiter can grant the controller path a bounded turn
+(`MaxPadBurst`) instead of being starved while the delivered framer sits
+mid-frame. The selected classic length is frozen across OpenSSL
+WANT_READ/WANT_WRITE retries: the buffer address, the length and the bytes are
+retained (a copy bounded by one receive chunk is kept and compared on every
+retry) until the write completes or the session ends. Further classic data may
+queue behind the frozen write and focus transitions may run, but neither
+re-derives, shrinks or replaces the in-flight operation. The TV send buffer is
+requested smaller (`SO_SNDBUF` 16 KiB) so a slow reader applies TCP backpressure
+instead of an unbounded kernel backlog, keeping the in-flight window small and
+the two directions interleaved at the reader's pace. `SO_SNDBUF` is best
+effort, not a kernel limit: the kernel may refuse the request, round it up or
+(Linux) double it, so the proxy reads the effective size back and logs it and
+correctness never depends on an exact value. The sustained regression runs in
+Linux CI under an outer deadline and the fixture's own overall deadline.
+
 The TV requires negotiated/ready classic protocol, authenticated bridge mode and
 active focus before DGPD can inject. Capture ID must match the current CINN.
 Sequence must strictly increase for the connection and must not reset on COUT or
