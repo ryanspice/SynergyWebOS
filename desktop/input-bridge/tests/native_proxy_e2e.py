@@ -46,6 +46,8 @@ def main() -> int:
     fixture: Path | None = None
     runtime: tempfile.TemporaryDirectory[str] | None = None
     first_error: str | None = None
+    focus_leave_acks: int | None = None
+    post_observation_acks: int | None = None
     started = time.monotonic()
     proxy_stderr = ""
     daemon_stderr = ""
@@ -55,6 +57,29 @@ def main() -> int:
         if not value:
             raise AssertionError(label)
         checks.append(label)
+
+    def classic_keepalive_barrier(label: str, *, allow_prior_cnop: bool = True) -> int:
+        """Reach CALV's ordered echo, optionally draining prior valid CNOPs."""
+        assert core
+        helpers["send"](core, b"CALV")
+        deadline = time.monotonic() + 2.0
+        acknowledgements = 0
+        for _ in range(256):
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise AssertionError("classic keepalive echo deadline")
+            core.settimeout(remaining)
+            response = helpers["packet"](core)
+            if response == b"CALV":
+                break
+            if response != b"CNOP" or not allow_prior_cnop:
+                raise AssertionError(f"unexpected response before keepalive echo: {response[:16]!r}")
+            acknowledgements += 1
+        else:
+            raise AssertionError("classic acknowledgement budget before keepalive echo")
+        core.settimeout(2)
+        check(helpers["packet"](core) == b"CNOP", label)
+        return acknowledgements
 
     try:
         with tempfile.TemporaryDirectory(prefix="ephemeral-proxy-daemon-pki-", dir=private_root.name) as pki_dir:
@@ -141,39 +166,35 @@ def main() -> int:
 
             before_leave = after_input["client"]["input_events"]
             helpers["send"](core, b"COUT")
-            check(helpers["packet"](core) == b"CNOP", "actual daemon acknowledges focus leave")
-            after_leave = helpers["wait"](
-                lambda: (s if (s := helpers["rpc"](runtime_path, "status"))["client"]["input_events"] > before_leave else None),
-                limit=2.0,
+            # DGPD also acknowledges with CNOP, so the first CNOP is not a
+            # specific COUT reply. CALV has a distinct ordered echo: reaching
+            # it proves COUT and every already queued pre-leave frame were
+            # processed. Only CNOP is valid from the daemon in this direction;
+            # controller data or any other response remains an error.
+            focus_leave_acks = classic_keepalive_barrier(
+                "actual daemon acknowledges focus leave before the ordered keepalive barrier"
             )
+            # The barrier, rather than a status polling race, establishes that
+            # release() and its controller neutralization have completed.
+            after_leave = helpers["rpc"](runtime_path, "status")
             check(after_leave["client"]["input_events"] > before_leave,
                   "actual daemon leave cleanup emits controller neutralization")
 
             fixture.write_text("invalid fixture is not polled after COUT\n", encoding="ascii")
+            # This remains an observation window for unwanted fixture polling,
+            # not a sleep substituted for focus/leave synchronization.
             time.sleep(0.2)
             stable = helpers["rpc"](runtime_path, "status")
             check(stable["client"]["running"] and not stable["client"]["error"] and
                   stable["client"]["input_events"] == after_leave["client"]["input_events"],
                   "focus-leave stops polling and preserves the live classic session")
-            helpers["send"](core, b"CALV")
-            # DGPD and COUT acknowledgements may already be queued. Wait for
-            # this keepalive's distinct echo, then its ordered CNOP, rather
-            # than mistaking an earlier acknowledgement for the reply.
-            keepalive_deadline = time.monotonic() + 2.0
-            for _ in range(256):
-                remaining = keepalive_deadline - time.monotonic()
-                if remaining <= 0:
-                    raise AssertionError("classic keepalive echo deadline")
-                core.settimeout(remaining)
-                response = helpers["packet"](core)
-                if response == b"CALV":
-                    break
-                if response != b"CNOP":
-                    raise AssertionError(f"unexpected response before keepalive echo: {response[:16]!r}")
-            else:
-                raise AssertionError("classic acknowledgement budget before keepalive echo")
-            core.settimeout(2)
-            check(helpers["packet"](core) == b"CNOP", "live classic keepalive works after controller cleanup")
+            # No request is outstanding during the observation window. Unlike
+            # the pre-leave queue above, any CNOP before this echo is therefore
+            # a late post-leave event and must fail rather than be drained.
+            post_observation_acks = classic_keepalive_barrier(
+                "live classic keepalive works after controller cleanup",
+                allow_prior_cnop=False,
+            )
             stop_result = helpers["rpc"](runtime_path, "stop")
             check(stop_result["ok"], "actual daemon Stop is accepted during the bridge session")
             stopped = helpers["wait"](
@@ -248,6 +269,9 @@ def main() -> int:
         "ctl": ctl_bin,
         "checks_passed": checks,
         "first_error": first_error,
+        "focus_leave_pre_echo_cnop_acks": focus_leave_acks,
+        "post_observation_pre_echo_cnop_acks": post_observation_acks,
+        "post_leave_observation_seconds": 0.2,
         "proxy_stderr": proxy_stderr[-3000:],
         "daemon_stderr": daemon_stderr[-3000:],
         "daemon_stdout": daemon_stdout[-3000:],
