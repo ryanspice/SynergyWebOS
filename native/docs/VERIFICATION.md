@@ -421,8 +421,9 @@ boundaries`):
 - `main.cpp`: the classic write now uses the frozen boundary length instead of
   the whole receive chunk, so `delivered.boundary()` becomes a reachable
   scheduling point and the arbiter grants the controller a bounded turn. The
-  length is frozen across OpenSSL WANT_READ/WANT_WRITE retries. The TV socket
-  send buffer is bounded (`SO_SNDBUF` 16 KiB) so a slow reader applies real TCP
+  length is frozen across OpenSSL WANT_READ/WANT_WRITE retries and checked. The TV
+  socket send buffer is requested at `SO_SNDBUF` 16 KiB (best effort; the
+  effective size is read back and logged) so a slow reader applies real TCP
   backpressure instead of an unbounded kernel backlog.
 - `bridge_wire_test.cpp`: added `test_classic_write_to_boundary()` covering
   whole frames, multiple frames per chunk, split prefixes, split payloads,
@@ -449,3 +450,42 @@ Remaining limitations: host loopback timings are observations, not a target
 latency bound; no physical TV, controller, live Synergy server, driver or
 installed service was exercised; PC-side controller suppression and physical
 acceptance remain separate gates. Batch 4b (reconnect) is not started.
+
+### Batch 4a acceptance closeout - November 24, 2026
+
+PR #20 was held for a small, focused closeout before merge readiness:
+
+- **CI registration.** `proxy_sustained.py` now runs in the Linux `bridge` CI
+  job. The step is bounded twice: an outer `timeout --signal=TERM
+  --kill-after=15s 180s`, and the fixture's own 90 s overall `SIGALRM`
+  deadline. Output is streamed through `tee` to a preserved log and the JSON
+  verdict is re-printed on failure, so a red run stays diagnosable. The job
+  timeout rose from 15 to 20 minutes.
+- **`SO_SNDBUF` is best effort.** The request result is now checked, the
+  effective value is read back with `getsockopt` and logged, and a refused
+  request is a hardening loss rather than a session failure. Linux reports
+  32,768 for a 16,384 request (kernels double it), which is why documentation no
+  longer calls 16 KiB a guaranteed limit.
+- **Frozen retry invariant is now verified, not assumed.** The selected classic
+  address, length and bytes are retained; a byte copy bounded by one receive
+  chunk is compared on every retry and a mismatch fails with `TLS`. The harness
+  proves the path ran live (31 classic WANT retries in the accepted run) while
+  new classic data kept queuing behind the frozen write (peak queue 65,536
+  bytes, the exact budget).
+- **Fixture boundedness.** The overall `SIGALRM` deadline interrupts the main
+  thread even inside a blocking socket call, `finally` cleanup still runs, and
+  every helper thread is joined through a bounded, asserted helper instead of a
+  bare `join`.
+- **Cost and write-call observations.** The proxy reports per-session counters
+  (`Relay stats: classic_writes= controller_writes= tls_retries=
+  classic_write_retries= peak_queue_bytes=`), and the fixture records proxy CPU
+  seconds and classic wire bytes/second. Arbitration semantics are unchanged.
+- **RED result preserved.** The whole-chunk-writer control still fails the
+  regression with 4 pads and 0 alternations, even with the bounded buffer;
+  evidence stays in `.ai/evidence/input-bridge-sustained-fairness/`.
+
+Accepted run (GCC 13.3, OpenSSL 3.0.13, release build, WSL host): `PASS`,
+512/512 classic frames, 144+ controller frames, 35 alternations, max controller
+burst 4, max classic gap 0.22 s, proxy CPU 0.12-0.25 s over a ~13 s contention
+phase (~40 KB/s), clean teardown and no stale frames. CI is the authority for the
+final verdict; these host numbers remain observations.

@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import runpy
 import select
+import signal
 import socket
 import ssl
 import struct
@@ -19,6 +20,38 @@ import time
 MAX_FRAME = 4 * 1024 * 1024
 QUEUE_LIMIT = 64 * 1024
 CAPTURE = 77
+# Hard overall deadline for the whole fixture.  Per-socket timeouts alone can
+# leave a wedged phase (or a wedged thread) running until the CI job deadline;
+# SIGALRM interrupts the main thread even inside a blocking socket call and the
+# normal ``finally`` cleanup still runs.
+OVERALL_DEADLINE_SECONDS = 90
+
+
+def install_deadline() -> bool:
+    if not hasattr(signal, "SIGALRM"):
+        return False
+
+    def expire(*_args: object) -> None:
+        raise TimeoutError(
+            f"sustained fixture exceeded its {OVERALL_DEADLINE_SECONDS} s overall deadline"
+        )
+
+    signal.signal(signal.SIGALRM, expire)
+    signal.alarm(OVERALL_DEADLINE_SECONDS)
+    return True
+
+
+def process_cpu_seconds(pid: int) -> float | None:
+    """CPU time (user+system) of the proxy, Linux /proc only."""
+    try:
+        fields = Path(f"/proc/{pid}/stat").read_text().split()
+        ticks = int(fields[13]) + int(fields[14])
+    except (OSError, IndexError, ValueError):
+        return None
+    clock = getattr(os, "sysconf", None)
+    if clock is None:
+        return None
+    return round(ticks / clock("SC_CLK_TCK"), 3)
 
 
 def main() -> int:
@@ -33,6 +66,7 @@ def main() -> int:
     checks: list[str] = []
     first_error: str | None = None
     proxy_stderr = ""
+    deadline_installed = install_deadline()
     started = time.monotonic()
     metrics: dict[str, object] = {}
 
@@ -40,6 +74,13 @@ def main() -> int:
         if not value:
             raise AssertionError(label)
         checks.append(label)
+
+    def join_checked(thread: threading.Thread, label: str, timeout: float = 10.0) -> None:
+        """Join with a real bound; a wedged helper thread is a failure."""
+        thread.join(timeout)
+        check(not thread.is_alive(), f"{label} thread stops within its deadline")
+        check(getattr(thread, "error", None) is None,
+              f"{label} thread ends without error: {getattr(thread, 'error', None)}")
 
     def receive(sock: socket.socket, size: int) -> bytes:
         data = bytearray()
@@ -56,9 +97,31 @@ def main() -> int:
             raise AssertionError(f"invalid relayed frame length: {length}")
         return receive(sock, length)
 
+    def parse_diagnostics(text: str) -> dict[str, int]:
+        line = next((item for item in text.splitlines() if item.startswith("Relay stats:")), "")
+        values: dict[str, int] = {}
+        for part in line.partition(":")[2].split():
+            key, _, value = part.partition("=")
+            if key and value.isdigit():
+                values[key] = int(value)
+        return values
+
+    def parse_send_buffer(text: str) -> dict[str, object]:
+        line = next((item for item in text.splitlines() if item.startswith("TV send buffer:")), "")
+        if not line:
+            return {"reported": False}
+        numbers = [int(token) for token in line.replace(",", " ").split() if token.isdigit()]
+        return {
+            "reported": True,
+            "line": line,
+            "requested_bytes": numbers[0] if numbers else None,
+            "effective_bytes": numbers[1] if len(numbers) > 1 else None,
+        }
+
     private_root = tempfile.TemporaryDirectory(prefix="sy-sustain-")
     os.chmod(private_root.name, 0o700)
     proxy: subprocess.Popen[str] | None = None
+    stderr_collector: StderrCollector | None = None
     core_listener: socket.socket | None = None
     server: socket.socket | None = None
     tv: ssl.SSLSocket | None = None
@@ -83,6 +146,8 @@ def main() -> int:
                  "--upstream-port", str(core_listener.getsockname()[1]), "--fixture", str(fixture)],
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
             )
+            stderr_collector = StderrCollector(proxy.stderr)
+            stderr_collector.start()
             ready: list[str] = []
 
             def read_ready() -> None:
@@ -91,7 +156,7 @@ def main() -> int:
 
             ready_thread = threading.Thread(target=read_ready, daemon=True)
             ready_thread.start()
-            ready_thread.join(4)
+            join_checked(ready_thread, "proxy readiness", 4)
             check(bool(ready and "Bridge ready" in ready[0]), "actual proxy starts for sustained loopback")
 
             raw = socket.create_connection(("127.0.0.1", proxy_port), timeout=4)
@@ -202,6 +267,8 @@ def main() -> int:
 
             sender.join(10)
             upstream.join(10)
+            join_checked(sender, "offered classic flood", 10)
+            join_checked(upstream, "upstream relay", 10)
             check(not sender.error and sender.completed, "offered classic flood is fully accepted by the proxy")
             check(not upstream.error and upstream.data == input_stream,
                   "interleaved keyboard, pointer and keepalive bytes reach Core unchanged")
@@ -274,11 +341,11 @@ def main() -> int:
                     check(body == leave_flood[leave_classic], "queued pre-leave classic bytes stay intact")
                     leave_classic += 1
             leave_sender.join(5)
+            join_checked(leave_sender, "focus-loss classic burst", 5)
             check(leave_classic == len(leave_flood) and not leave_sender.error,
                   "focus boundary follows every earlier classic frame")
             writer.stop()
-            writer.join(5)
-            check(not writer.error, "continuous fixture writer stops cleanly")
+            join_checked(writer, "continuous fixture writer", 5)
             helpers["write_fixture"](fixture, ["invalid fixture must remain unread after COUT"])
 
             observation_started = time.monotonic()
@@ -305,9 +372,45 @@ def main() -> int:
                 "post_leave_frames": 0,
                 "disconnect_observed": True,
             }
+
+            # Cost and retry observations.  The frozen-write invariant is
+            # checked inside the proxy on every retry, so a nonzero classic
+            # retry count proves the invariant ran under live backpressure.
+            session_stderr = ""
+            settle = time.monotonic() + 3.0
+            while "Relay stats:" not in session_stderr and time.monotonic() < settle:
+                session_stderr = stderr_collector.snapshot()
+                if "Relay stats:" not in session_stderr:
+                    time.sleep(0.02)
+            proxy_stderr += session_stderr
+            diagnostics = parse_diagnostics(session_stderr)
+            metrics["session_diagnostics"] = diagnostics
+            metrics["send_buffer"] = parse_send_buffer(session_stderr)
+            cpu = process_cpu_seconds(proxy.pid)
+            wall = time.monotonic() - started
+            metrics["cost"] = {
+                "proxy_cpu_seconds": cpu,
+                "wall_seconds": round(wall, 3),
+                "classic_wire_bytes_per_second": round(
+                    metrics["contention"]["classic_wire_bytes"] / max(1e-9, metrics["contention"]["phase_seconds"]), 1),
+                "counters_are_proxy_session_totals": True,
+            }
+            check(diagnostics.get("classic_write_retries", 0) > 0,
+                  "classic TLS writes took at least one WANT retry under sustained backpressure")
+            check(diagnostics.get("classic_writes", 0) > 0 and diagnostics.get("controller_writes", 0) > 0,
+                  "session diagnostics report both write classes")
+            buffer_report = metrics["send_buffer"]
+            check(bool(buffer_report.get("reported")), "proxy reports the TV send-buffer request")
+            effective_buffer = buffer_report.get("effective_bytes")
+            check(isinstance(effective_buffer, int) and effective_buffer >= 16384,
+                  f"proxy reads back a bound effective TV send buffer: {effective_buffer}")
+            check(diagnostics.get("peak_queue_bytes", 0) <= QUEUE_LIMIT,
+                  "peak classic queue depth stays inside its budget")
     except Exception as exc:
         first_error = f"{type(exc).__name__}: {exc}"
     finally:
+        if deadline_installed:
+            signal.alarm(0)
         if writer:
             writer.stop()
             writer.join(3)
@@ -325,7 +428,12 @@ def main() -> int:
                 proxy.kill()
                 proxy.wait(timeout=2)
             if proxy.stderr:
-                proxy_stderr = proxy.stderr.read()
+                proxy_stderr += proxy.stderr.read()
+        if stderr_collector:
+            stderr_collector.join(2)
+            snapshot = stderr_collector.snapshot()
+            if snapshot and snapshot not in proxy_stderr:
+                proxy_stderr += snapshot
         private_root.cleanup()
 
     result = {
@@ -336,10 +444,11 @@ def main() -> int:
         "metrics": metrics,
         "proxy_stderr": proxy_stderr[-4000:],
         "elapsed_seconds": round(time.monotonic() - started, 3),
+        "overall_deadline_seconds": OVERALL_DEADLINE_SECONDS if deadline_installed else None,
         "production_path": "actual proxy binary, real authenticated TLS, synthetic Core and controller fixtures",
         "helper_level_evidence": [
             "bridge-wire-test separately covers exact queue budgets, stale-event pruning, safety projection, and in-flight sample ownership",
-            "this script observes relayed production frames; it does not inspect internal queue depths or OpenSSL WANT_WRITE counters",
+            "the proxy reports session write/retry counters and the effective TV send buffer on stderr; the fixture parses them here",
         ],
         "scope_limits": [
             "contention is established by a small receive window, a reader hold, and offered classic bytes exceeding the relay queue budget while live pads update",
@@ -351,6 +460,29 @@ def main() -> int:
     result_path.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(result, indent=2))
     return 0 if first_error is None else 1
+
+
+class StderrCollector(threading.Thread):
+    """Continuously drain proxy stderr so the pipe can never fill and the
+    session diagnostics are available immediately when they are printed."""
+
+    def __init__(self, stream) -> None:
+        super().__init__(daemon=True)
+        self.stream = stream
+        self.text = ""
+        self._lock = threading.Lock()
+
+    def run(self) -> None:
+        try:
+            for line in self.stream:
+                with self._lock:
+                    self.text += line
+        except Exception:
+            return
+
+    def snapshot(self) -> str:
+        with self._lock:
+            return self.text
 
 
 class SendThread(threading.Thread):
