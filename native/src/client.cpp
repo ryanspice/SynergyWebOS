@@ -83,6 +83,8 @@ namespace synergy {
         }
         events_=0;
         ingress_peak_=0;
+        attempts_=0;
+        retry_delay_ms_=0;
         running_=true;
         try{
             worker_=std::thread(&Client::loop,this,c,once);

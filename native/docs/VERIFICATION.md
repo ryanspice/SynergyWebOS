@@ -503,16 +503,23 @@ progression. `--once`, the eventfd cancellation, `Restart` and saved/active
 configuration semantics are unchanged, and no global sequence counter was
 introduced.
 
-`native/tests/client_recovery.py` (16 CTest cases, real daemon, synthetic mTLS
+`stability_window_ms` is honoured when configured but omitted from
+`Config::json()`, so the production policy stays fixed at 10 s, unknown-field
+validation stays strict, and a saved file written here still loads on a build
+that predates the field. Only fixtures set it.
+
+`native/tests/client_recovery.py` (21 CTest cases, real daemon, synthetic mTLS
 server, dry-run input) covers initial-failure recovery, unfocused readiness,
 transport loss during input, an interrupted deferred repeat batch, an
 interrupted mixed classic/controller burst, reconnect plus fresh CINN, four-slot
 resynchronization, five repeated cycles with fd/thread/RSS bounds, stop during
-connect/TLS/handshake/backoff, and the full backoff contract including
-stale/duplicate/wrong-capture rejection.
+connect/TLS/handshake/backoff, the backoff contract (duration versus readiness,
+unfocused stability, setup-only time, the 30 s cap) and stale/duplicate/
+wrong-capture rejection.
 
-Baseline `8379be9` fails `backoff-stable-resets` with a 2.00 s delay and passes
-the control scenarios; the fixed build passes 31/31 Release and 30/30
-ASan/UBSan with leak detection. Recovery stays host-only: sleep/wake, DAC
-restart, physical controller and live server behavior remain unverified.
+Baseline `8379be9` fails the production-timed `backoff-duration-over-window`
+(1.00 s instead of 2.00 s) and the accelerated readiness cases, and passes the
+controls; the fixed build passes 33/33 Release and 32/32 ASan/UBSan with leak
+detection. Recovery stays host-only: sleep/wake, DAC restart, physical
+controller and live server behavior remain unverified.
 

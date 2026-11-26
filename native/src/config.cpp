@@ -94,8 +94,10 @@ namespace synergy {
         j.set("home_target",Json::string(home_target));
         j.set("locale",Json::string(locale));
         j.set("home_delay_ms",Json::number(home_delay_ms));
+        // Deliberately not persisted: production stays on the fixed 10 s policy
+        // and only fixtures ever set this. Omitting it from json() keeps the
+        // saved file byte-compatible with builds that predate the field.
         j.set("idle_timeout_ms",Json::number(idle_timeout_ms));
-        j.set("stability_window_ms",Json::number(stability_window_ms));
         j.set("input_bridge",Json::boolean(input_bridge));
         j.set("bridge_ca_file",Json::string(bridge_ca_file));
         j.set("bridge_cert_file",Json::string(bridge_cert_file));
