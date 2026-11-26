@@ -159,6 +159,23 @@ if(BUILD_TESTING)
     set_tests_properties(native-integration PROPERTIES TIMEOUT 45)
     add_test(NAME native-bridge-tls COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/bridge_tls_integration.py $<TARGET_FILE:synergy-daemon> $<TARGET_FILE:synergy-tvctl>)
     set_tests_properties(native-bridge-tls PROPERTIES TIMEOUT 60)
+    # Session recovery: one daemon process per scenario, real mTLS, synthetic
+    # server, dry-run input. Stability-window scenarios shrink the production
+    # 10 s contract; backoff-default-window keeps it.
+    foreach(scenario
+        connect-recovery ready-unfocused transport-loss disconnect-repeat-batch
+        mixed-sustained sequence-scope reconnect-cinn resync-slots repeat-cycles
+        stop-connecting stop-tls stop-handshake stop-backoff
+        backoff-stable-resets backoff-failure-progresses)
+      add_test(NAME native-recovery-${scenario}
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/client_recovery.py
+          $<TARGET_FILE:synergy-daemon> ${scenario})
+      set_tests_properties(native-recovery-${scenario} PROPERTIES TIMEOUT 45)
+    endforeach()
+    add_test(NAME native-recovery-backoff-default-window
+      COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/client_recovery.py
+        $<TARGET_FILE:synergy-daemon> backoff-default-window)
+    set_tests_properties(native-recovery-backoff-default-window PROPERTIES TIMEOUT 60)
     add_test(NAME native-bundle COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/bundle_tests.py)
     add_test(NAME gear-settings-spike COMMAND ${Python3_EXECUTABLE} -m unittest discover -s ${CMAKE_CURRENT_SOURCE_DIR}/../spikes/gear-settings -p test_*.py -v)
   endif()
