@@ -17,10 +17,6 @@ struct Config {
     std::string locale="en";
     int home_delay_ms=0;
     int idle_timeout_ms=15000;
-    // Time a session must stay protocol-ready before it resets the reconnect
-    // progression back to one second.  Connect and handshake duration never
-    // counts.  10 s is the production default; fixtures shorten it.
-    int stability_window_ms=10000;
     bool input_bridge=false;
     std::string bridge_ca_file,bridge_cert_file,bridge_key_file,bridge_server_name;
     Json json()const;

@@ -66,7 +66,7 @@ namespace synergy {
         for(unsigned char c:name)if(!((c>='a'&&c<='z')||(c>='A'&&c<='Z')||(c>='0'&&c<='9')||c=='.'||c=='_'||c=='-'))throw std::runtime_error("Unsafe screen name");
         if(home_target!="system"&&home_target!="off")throw std::runtime_error("Home target must be system or off");
         if(std::string(locale_string(locale_from_string(locale)))!=locale)throw std::runtime_error("Locale must be en or fr-CA");
-        if(home_delay_ms<0||home_delay_ms>5000||idle_timeout_ms<3000||idle_timeout_ms>60000||stability_window_ms<200||stability_window_ms>60000)throw std::runtime_error("Invalid timeout");
+        if(home_delay_ms<0||home_delay_ms>5000||idle_timeout_ms<3000||idle_timeout_ms>60000)throw std::runtime_error("Invalid timeout");
         if(input_bridge){
             for(const auto* file:{&bridge_ca_file,&bridge_cert_file,&bridge_key_file}){
                 const std::filesystem::path path(*file);
@@ -109,7 +109,7 @@ namespace synergy {
         if(!j.object_type())throw std::runtime_error("Config must be an object");
         Config c;
         const std::set<std::string> allowed{
-            "server","port","name","width","height","dry_run","allow_plaintext","cursor_keepalive","home_target","locale","home_delay_ms","idle_timeout_ms", "stability_window_ms","input_bridge","bridge_ca_file","bridge_cert_file","bridge_key_file","bridge_server_name"}
+            "server","port","name","width","height","dry_run","allow_plaintext","cursor_keepalive","home_target","locale","home_delay_ms","idle_timeout_ms", "input_bridge","bridge_ca_file","bridge_cert_file","bridge_key_file","bridge_server_name"}
         ;
         for(const auto& [k,v]:j.members()){
             (void)v;
@@ -149,7 +149,6 @@ namespace synergy {
         number("height",c.height);
         number("home_delay_ms",c.home_delay_ms);
         number("idle_timeout_ms",c.idle_timeout_ms);
-        number("stability_window_ms",c.stability_window_ms);
         flag("dry_run",c.dry_run);
         flag("allow_plaintext",c.allow_plaintext);
         flag("cursor_keepalive",c.cursor_keepalive);

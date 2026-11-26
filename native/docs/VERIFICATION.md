@@ -496,30 +496,34 @@ Per-connection state was already function-local in `Client::session()`, so a
 reconnect starts from clean decoder, repeat, sample and platform generations.
 What was wrong was the reset rule: `Client::loop` compared the *total attempt
 duration* against 10 s, so a ready session's own runtime was mixed with its
-setup cost. The rule is now `Attempt::ready_at` plus
-`config.stability_window_ms` (default 10000): only sustained protocol readiness
-resets the 1 s delay, while a slow failed connect or handshake keeps the
-progression. `--once`, the eventfd cancellation, `Restart` and saved/active
-configuration semantics are unchanged, and no global sequence counter was
-introduced.
+setup cost. The rule is now `Attempt::ready_at` plus the fixed 10 000 ms
+`StabilityWindowMs`: only sustained protocol readiness resets the 1 s delay,
+while a slow failed connect or handshake keeps the progression. `--once`, the
+eventfd cancellation, `Restart` and saved/active configuration semantics are
+unchanged, and no global sequence counter was introduced.
 
-`stability_window_ms` is honoured when configured but omitted from
-`Config::json()`, so the production policy stays fixed at 10 s, unknown-field
-validation stays strict, and a saved file written here still loads on a build
-that predates the field. Only fixtures set it.
+The window is deliberately **outside the configuration contract**. `Client` reads
+`SYNERGY_STABILITY_WINDOW_MS` once per run (digits only, 200..60000, ignored when
+absent or invalid) so fixtures can accelerate it, while `Config`, `json()` and
+`from_json()` are untouched and every saved file is byte-identical to the
+baseline.
 
-`native/tests/client_recovery.py` (21 CTest cases, real daemon, synthetic mTLS
+`state`, `error`, `connection_attempts` and `next_retry_ms` are published through
+one lock and read under the same lock in `snapshot()`, repairing the failure edge
+where a state could be observed before its retry delay.
+
+`native/tests/client_recovery.py` (22 CTest cases, real daemon, synthetic mTLS
 server, dry-run input) covers initial-failure recovery, unfocused readiness,
 transport loss during input, an interrupted deferred repeat batch, an
 interrupted mixed classic/controller burst, reconnect plus fresh CINN, four-slot
 resynchronization, five repeated cycles with fd/thread/RSS bounds, stop during
 connect/TLS/handshake/backoff, the backoff contract (duration versus readiness,
-unfocused stability, setup-only time, the 30 s cap) and stale/duplicate/
-wrong-capture rejection.
+unfocused stability, setup-only time, the 30 s cap), status-snapshot coherence
+and stale/duplicate/wrong-capture rejection.
 
 Baseline `8379be9` fails the production-timed `backoff-duration-over-window`
 (1.00 s instead of 2.00 s) and the accelerated readiness cases, and passes the
-controls; the fixed build passes 33/33 Release and 32/32 ASan/UBSan with leak
+controls; the fixed build passes 34/34 Release and 33/33 ASan/UBSan with leak
 detection. Recovery stays host-only: sleep/wake, DAC restart, physical
 controller and live server behavior remain unverified.
 

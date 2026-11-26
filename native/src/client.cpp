@@ -9,6 +9,7 @@
 #include <fcntl.h>
 #include <sys/eventfd.h>
 #include <cerrno>
+#include <cstdlib>
 #include <array>
 #include <algorithm>
 #include <deque>
@@ -53,6 +54,21 @@ namespace synergy {
                 at+=static_cast<size_t>(n);
             }
         }
+        // Narrow internal timing seam.  The production policy is the fixed
+        // constant; only fixtures set the variable so the public configuration
+        // contract (and every saved file) stays unchanged.
+        int64_t stability_window_ms(){
+            constexpr int64_t Default=10000;
+            const char* text=std::getenv("SYNERGY_STABILITY_WINDOW_MS");
+            if(!text||!*text)return Default;
+            int64_t value=0;
+            for(const char* c=text;*c;++c){
+                if(*c<'0'||*c>'9')return Default;
+                value=value*10+(*c-'0');
+                if(value>60000)return Default;
+            }
+            return value>=200?value:Default;
+        }
     }
     Client::Client(Platform& platform):platform_(platform),wake_(eventfd(0,EFD_CLOEXEC|EFD_NONBLOCK)){
         if(wake_<0)throw std::runtime_error("Cannot create client cancellation wakeup");
@@ -60,6 +76,17 @@ namespace synergy {
     Client::~Client(){stop();close(wake_);}
     void Client::state(std::string s,std::string error){
         std::lock_guard lock(mutex_);
+        if(state_!=s||error_!=error){
+            log_.push_back(s+(error.empty()?"":": "+error));
+            while(log_.size()>100)log_.pop_front();
+        }
+        state_=std::move(s);
+        error_=std::move(error);
+    }
+    void Client::publish(std::string s,std::string error,int64_t retry_ms,unsigned attempt_delta){
+        std::lock_guard lock(mutex_);
+        attempts_+=attempt_delta;
+        retry_delay_ms_=retry_ms;
         if(state_!=s||error_!=error){
             log_.push_back(s+(error.empty()?"":": "+error));
             while(log_.size()>100)log_.pop_front();
@@ -80,11 +107,11 @@ namespace synergy {
             std::lock_guard lock(mutex_);
             active_=c;
             have_active_=true;
+            attempts_=0;
+            retry_delay_ms_=0;
         }
         events_=0;
         ingress_peak_=0;
-        attempts_=0;
-        retry_delay_ms_=0;
         running_=true;
         try{
             worker_=std::thread(&Client::loop,this,c,once);
@@ -101,7 +128,7 @@ namespace synergy {
         do {written=write(wake_,&wake,sizeof wake);} while(written<0&&errno==EINTR);
         platform_.cancel();
         if(worker_.joinable())worker_.join();
-        state("stopped");
+        publish("stopped","",0,0);
     }
     Json Client::snapshot()const{
         std::lock_guard lock(mutex_);
@@ -112,8 +139,8 @@ namespace synergy {
         j.set("active_config",have_active_?active_.json():Json());
         j.set("input_events",Json::number(static_cast<double>(events_.load())));
         j.set("peak_ingress_bytes",Json::number(static_cast<double>(ingress_peak_.load())));
-        j.set("connection_attempts",Json::number(static_cast<double>(attempts_.load())));
-        j.set("next_retry_ms",Json::number(static_cast<double>(retry_delay_ms_.load())));
+        j.set("connection_attempts",Json::number(static_cast<double>(attempts_)));
+        j.set("next_retry_ms",Json::number(static_cast<double>(retry_delay_ms_)));
         auto log=Json::array();
         for(const auto& l:log_)log.add(Json::string(l));
         j.set("log",log);
@@ -121,26 +148,29 @@ namespace synergy {
     }
     void Client::loop(Config config,bool once){
         unsigned backoff=1;
+        const auto stability=stability_window_ms();
         while(running()){
             Attempt attempt;
-            ++attempts_;
-            retry_delay_ms_=0;
+            publish("connecting","",0,1);
+            std::string failure;
             try{
-                state("connecting");
                 session(config,attempt);
-                if(running())state("disconnected","Server closed the session");
+                if(running())failure="Server closed the session";
             }
             catch(const std::exception& e){
-                if(running())state("disconnected",e.what());
+                failure=e.what();
             }
             platform_.cancel();
-            if(once)break;
             // Only time spent protocol-ready is stability evidence.  A connect
             // or handshake that failed slowly must keep the progression, while
             // a ready session held past the stability window restarts it at 1s.
             // A ready but unfocused connection still counts as healthy.
-            if(attempt.ready_at&&monotonic_ms()-*attempt.ready_at>=config.stability_window_ms)backoff=1;
-            retry_delay_ms_=static_cast<int64_t>(backoff)*1000;
+            if(!once&&attempt.ready_at&&monotonic_ms()-*attempt.ready_at>=stability)backoff=1;
+            // One publish carries state, error and delay so a snapshot can never
+            // pair "disconnected" with a delay that is not yet or no longer set.
+            // It happens before the one-shot break so the last error is visible.
+            if(running())publish("disconnected",failure,once?0:static_cast<int64_t>(backoff)*1000,0);
+            if(once)break;
             auto until=monotonic_ms()+backoff*1000;
             while(running()&&monotonic_ms()<until){
                 pollfd wake{wake_,POLLIN,0};
@@ -150,7 +180,10 @@ namespace synergy {
             }
             backoff=std::min(30u,backoff*2);
         }
-        retry_delay_ms_=0;
+        {
+            std::lock_guard lock(mutex_);
+            retry_delay_ms_=0;
+        }
         running_=false;
     }
     void Client::session(const Config& config,Attempt& attempt){
