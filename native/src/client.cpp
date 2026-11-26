@@ -109,6 +109,14 @@ namespace synergy {
             have_active_=true;
             attempts_=0;
             retry_delay_ms_=0;
+            // Publish the first state here so a snapshot taken immediately after
+            // start() can never report a running client as stopped.
+            if(state_!="connecting"||!error_.empty()){
+                log_.push_back("connecting");
+                while(log_.size()>100)log_.pop_front();
+            }
+            state_="connecting";
+            error_.clear();
         }
         events_=0;
         ingress_peak_=0;
