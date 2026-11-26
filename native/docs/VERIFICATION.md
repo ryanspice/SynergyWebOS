@@ -370,7 +370,7 @@ and 64 mTLS checks were retained rather than rerun.
 
 | Gap | Scope | Status |
 |---|---|---|
-| Successful reconnect end-to-end: backoff growth/reset, active-session drop then re-entry, repeated cleanup, sleep/wake | `client.cpp`, `client_regressions.cpp`, `integration.py` | OPEN - each client mode makes one connection; integration reconnect starts then stops immediately |
+| Successful reconnect end-to-end: backoff growth/reset, active-session drop then re-entry, repeated cleanup, sleep/wake | `client.cpp`, `client_recovery.py` | CLOSED - `native-recovery-*` covers initial failure, transport loss, repeat-batch interruption, mixed traffic, fresh CINN, slot resynchronization, repeated cycles, stop in every phase and the backoff contract (Batch 4b) |
 | LS2 lifecycle: timeout/cancel cleanup, connection recovery, helper/bus restart | `ls2_transport.cpp` | OPEN - no fake-runtime host coverage; target evidence covers schema exchange and caller denial |
 | Platform action cancellation: queued Home/Cycle invalidation, Stop during in-flight Luna action | `platform.cpp`, `core_tests.cpp` | OPEN - source-inspected only |
 | Target UID/jail admission matrix, physical Start/Stop lifecycle, real Home/Cycle effects | target runtime | PENDING target |
@@ -489,3 +489,30 @@ Accepted run (GCC 13.3, OpenSSL 3.0.13, release build, WSL host): `PASS`,
 burst 4, max classic gap 0.22 s, proxy CPU 0.12-0.25 s over a ~13 s contention
 phase (~40 KB/s), clean teardown and no stale frames. CI is the authority for the
 final verdict; these host numbers remain observations.
+
+## Batch 4b - session recovery and reconnection - November 25, 2026
+
+Per-connection state was already function-local in `Client::session()`, so a
+reconnect starts from clean decoder, repeat, sample and platform generations.
+What was wrong was the reset rule: `Client::loop` compared the *total attempt
+duration* against 10 s, so a ready session's own runtime was mixed with its
+setup cost. The rule is now `Attempt::ready_at` plus
+`config.stability_window_ms` (default 10000): only sustained protocol readiness
+resets the 1 s delay, while a slow failed connect or handshake keeps the
+progression. `--once`, the eventfd cancellation, `Restart` and saved/active
+configuration semantics are unchanged, and no global sequence counter was
+introduced.
+
+`native/tests/client_recovery.py` (16 CTest cases, real daemon, synthetic mTLS
+server, dry-run input) covers initial-failure recovery, unfocused readiness,
+transport loss during input, an interrupted deferred repeat batch, an
+interrupted mixed classic/controller burst, reconnect plus fresh CINN, four-slot
+resynchronization, five repeated cycles with fd/thread/RSS bounds, stop during
+connect/TLS/handshake/backoff, and the full backoff contract including
+stale/duplicate/wrong-capture rejection.
+
+Baseline `8379be9` fails `backoff-stable-resets` with a 2.00 s delay and passes
+the control scenarios; the fixed build passes 31/31 Release and 30/30
+ASan/UBSan with leak detection. Recovery stays host-only: sleep/wake, DAC
+restart, physical controller and live server behavior remain unverified.
+

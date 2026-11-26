@@ -110,6 +110,8 @@ namespace synergy {
         j.set("active_config",have_active_?active_.json():Json());
         j.set("input_events",Json::number(static_cast<double>(events_.load())));
         j.set("peak_ingress_bytes",Json::number(static_cast<double>(ingress_peak_.load())));
+        j.set("connection_attempts",Json::number(static_cast<double>(attempts_.load())));
+        j.set("next_retry_ms",Json::number(static_cast<double>(retry_delay_ms_.load())));
         auto log=Json::array();
         for(const auto& l:log_)log.add(Json::string(l));
         j.set("log",log);
@@ -118,10 +120,12 @@ namespace synergy {
     void Client::loop(Config config,bool once){
         unsigned backoff=1;
         while(running()){
-            auto began=monotonic_ms();
+            Attempt attempt;
+            ++attempts_;
+            retry_delay_ms_=0;
             try{
                 state("connecting");
-                session(config);
+                session(config,attempt);
                 if(running())state("disconnected","Server closed the session");
             }
             catch(const std::exception& e){
@@ -129,7 +133,12 @@ namespace synergy {
             }
             platform_.cancel();
             if(once)break;
-            if(monotonic_ms()-began>10000)backoff=1;
+            // Only time spent protocol-ready is stability evidence.  A connect
+            // or handshake that failed slowly must keep the progression, while
+            // a ready session held past the stability window restarts it at 1s.
+            // A ready but unfocused connection still counts as healthy.
+            if(attempt.ready_at&&monotonic_ms()-*attempt.ready_at>=config.stability_window_ms)backoff=1;
+            retry_delay_ms_=static_cast<int64_t>(backoff)*1000;
             auto until=monotonic_ms()+backoff*1000;
             while(running()&&monotonic_ms()<until){
                 pollfd wake{wake_,POLLIN,0};
@@ -139,9 +148,10 @@ namespace synergy {
             }
             backoff=std::min(30u,backoff*2);
         }
+        retry_delay_ms_=0;
         running_=false;
     }
-    void Client::session(const Config& config){
+    void Client::session(const Config& config,Attempt& attempt){
         sockaddr_storage storage{
         }
         ;
@@ -210,6 +220,7 @@ namespace synergy {
         constexpr size_t MaxIngressBytes=256*1024;
         while(running()){
             auto now=monotonic_ms();
+            if(!attempt.ready_at&&protocol.ready())attempt.ready_at=now;
             protocol.expire_gamepads(now);
             if(!protocol.ready()&&now-handshake_started>5000)throw std::runtime_error("Server handshake deadline exceeded");
             if(now-last_frame>(protocol.ready()?config.idle_timeout_ms:5000))throw std::runtime_error("Server idle/handshake timeout");
