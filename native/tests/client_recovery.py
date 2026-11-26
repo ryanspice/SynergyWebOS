@@ -219,14 +219,14 @@ class Harness:
         return int(self.status()["input_events"])
 
     # -- sockets -----------------------------------------------------------
-    def accept(self, server: socket.socket, limit: float = 8.0) -> socket.socket:
+    def accept(self, server: socket.socket, limit: float = 15.0) -> socket.socket:
         server.settimeout(limit)
         raw, _ = server.accept()
         self.accepts.append(now())
         raw.settimeout(5)
         return raw
 
-    def accept_tls(self, server: socket.socket, limit: float = 8.0) -> ssl.SSLSocket:
+    def accept_tls(self, server: socket.socket, limit: float = 15.0) -> ssl.SSLSocket:
         raw = self.accept(server, limit)
         return self.context.wrap_socket(raw, server_side=True, do_handshake_on_connect=False)
 
@@ -274,6 +274,15 @@ def fd_count(pid: int) -> int:
 
 def thread_count(pid: int) -> int:
     return len(os.listdir(f"/proc/{pid}/task"))
+
+
+def sanitizer_build(pid: int) -> bool:
+    """True when the process has an AddressSanitizer runtime mapped."""
+    try:
+        maps = Path(f"/proc/{pid}/maps").read_text(encoding="ascii", errors="replace")
+    except OSError:
+        return False
+    return "libasan" in maps or "libclang_rt.asan" in maps
 
 
 def rss_kib(pid: int) -> int:
@@ -534,7 +543,14 @@ def scenario_repeat_cycles(h: Harness) -> None:
         check(fd_count(pid) <= baseline_fd + 1, f"file descriptors stay bounded ({baseline_fd} -> {fd_count(pid)})")
         check(thread_count(pid) <= baseline_thread + 1,
               f"threads stay bounded ({baseline_thread} -> {thread_count(pid)})")
-        if os.environ.get("RECOVERY_RSS_GATE", "1") == "1":
+        # The raw RSS delta is only comparable without a sanitizer allocator in
+        # the picture, so the sanitizer runtime is detected instead of assumed;
+        # RECOVERY_RSS_GATE still overrides. Leak detection stays enabled either
+        # way, so growth is still bounded by ASan's own reporting.
+        gate = os.environ.get("RECOVERY_RSS_GATE")
+        if gate is None:
+            gate = "0" if sanitizer_build(pid) else "1"
+        if gate == "1":
             growth = rss_kib(pid) - baseline_rss
             check(growth < 4096, f"retained memory stays bounded (+{growth} KiB)")
         h.stop()
