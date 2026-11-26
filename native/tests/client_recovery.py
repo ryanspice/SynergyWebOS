@@ -160,11 +160,18 @@ class Harness:
         self.context: ssl.SSLContext | None = None
         self.accepts: list[float] = []
         self.closes: list[float] = []
+        # Accelerated stability window, injected through the internal test-only
+        # environment seam; None keeps the fixed production 10 s policy.
+        self.window: int | None = None
 
     # -- lifecycle ---------------------------------------------------------
     def start_daemon(self) -> None:
+        environment = dict(os.environ)
+        if self.window:
+            environment["SYNERGY_STABILITY_WINDOW_MS"] = str(self.window)
         self.daemon = subprocess.Popen([DAEMON, "--runtime-dir", str(self.root)],
-                                       stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+                                       stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+                                       env=environment)
         wait(lambda: (self.root / "control.sock").is_socket(), label="daemon control socket")
         status = rpc(self.root, "status")
         self.saved = status["saved_config"]
@@ -181,16 +188,13 @@ class Harness:
             self.daemon.wait(timeout=3)
         self.daemon = None
 
-    def configure(self, port: int, *, window: int | None = None,
-                  idle: int | None = None) -> None:
+    def configure(self, port: int, *, idle: int | None = None) -> None:
         config = dict(self.saved, server="127.0.0.1", port=port, name="recovery-test",
                       dry_run=True, allow_plaintext=False, input_bridge=True,
                       bridge_ca_file=str(self.certs["ca"]),
                       bridge_cert_file=str(self.certs["client_cert"]),
                       bridge_key_file=str(self.certs["client_key"]),
                       bridge_server_name="bridge.test")
-        if window is not None and os.environ.get("RECOVERY_NO_WINDOW") != "1":
-            config["stability_window_ms"] = window
         if idle is not None:
             config["idle_timeout_ms"] = idle
         result = rpc(self.root, "configure", config=config)
@@ -330,7 +334,7 @@ def scenario_ready_unfocused(h: Harness) -> None:
 
 def scenario_transport_loss(h: Harness) -> None:
     with listener() as server:
-        h.configure(server.getsockname()[1], window=300)
+        h.configure(server.getsockname()[1])
         h.start()
         tls = h.accept_tls(server)
         h.negotiate(tls, 7)
@@ -357,7 +361,7 @@ def scenario_transport_loss(h: Harness) -> None:
 
 def scenario_disconnect_repeat_batch(h: Harness) -> None:
     with listener() as server:
-        h.configure(server.getsockname()[1], window=300)
+        h.configure(server.getsockname()[1])
         h.start()
         tls = h.accept_tls(server)
         h.negotiate(tls, 9)
@@ -387,7 +391,7 @@ def scenario_disconnect_repeat_batch(h: Harness) -> None:
 
 def scenario_mixed_sustained(h: Harness) -> None:
     with listener() as server:
-        h.configure(server.getsockname()[1], window=300)
+        h.configure(server.getsockname()[1])
         h.start()
         tls = h.accept_tls(server)
         h.negotiate(tls, 11)
@@ -445,7 +449,7 @@ def scenario_sequence_scope(h: Harness) -> None:
 
 def scenario_reconnect_cinn(h: Harness) -> None:
     with listener() as server:
-        h.configure(server.getsockname()[1], window=300)
+        h.configure(server.getsockname()[1])
         h.start()
         tls = h.accept_tls(server)
         h.negotiate(tls, 30)
@@ -483,7 +487,7 @@ def scenario_reconnect_cinn(h: Harness) -> None:
 
 def scenario_resync_slots(h: Harness) -> None:
     with listener() as server:
-        h.configure(server.getsockname()[1], window=300)
+        h.configure(server.getsockname()[1])
         h.start()
         tls = h.accept_tls(server)
         h.negotiate(tls, 40)
@@ -508,7 +512,7 @@ def scenario_resync_slots(h: Harness) -> None:
 
 def scenario_repeat_cycles(h: Harness) -> None:
     with listener() as server:
-        h.configure(server.getsockname()[1], window=300)
+        h.configure(server.getsockname()[1])
         h.start()
         pid = h.daemon.pid  # type: ignore[union-attr]
         baseline_fd = baseline_thread = 0
@@ -623,7 +627,7 @@ def scenario_stop_backoff(h: Harness) -> None:
 
 def scenario_backoff_stable_resets(h: Harness) -> None:
     with listener() as server:
-        h.configure(server.getsockname()[1], window=300)
+        h.configure(server.getsockname()[1])
         h.start()
         for cycle in range(3):
             tls = h.accept_tls(server)
@@ -644,7 +648,7 @@ def scenario_backoff_stable_resets(h: Harness) -> None:
 
 def scenario_backoff_failure_progresses(h: Harness) -> None:
     with listener() as server:
-        h.configure(server.getsockname()[1], window=300)
+        h.configure(server.getsockname()[1])
         h.start()
         for _ in range(3):
             raw = h.accept(server)
@@ -709,7 +713,7 @@ def scenario_backoff_duration_over_window(h: Harness) -> None:
 
 def scenario_backoff_unfocused_window(h: Harness) -> None:
     with listener() as server:
-        h.configure(server.getsockname()[1], window=300)
+        h.configure(server.getsockname()[1])
         h.start()
         for cycle in range(3):
             tls = h.accept_tls(server)
@@ -726,7 +730,7 @@ def scenario_backoff_unfocused_window(h: Harness) -> None:
 
 def scenario_backoff_setup_short_ready(h: Harness) -> None:
     with listener() as server:
-        h.configure(server.getsockname()[1], window=800)
+        h.configure(server.getsockname()[1])
         h.start()
         for cycle in range(3):
             raw = h.accept(server)
@@ -771,10 +775,12 @@ def scenario_backoff_cap(h: Harness) -> None:
 
 def scenario_diagnostics(h: Harness) -> None:
     port = free_port()
-    h.configure(port, window=300)
+    h.configure(port)
     status = rpc(h.root, "status")
     check("stability_window_ms" not in status["saved_config"],
-          "the stability window is not persisted into the saved configuration")
+          "the stability window is absent from the saved configuration contract")
+    check("stability_window_ms" not in (status["client"]["active_config"] or {}),
+          "the stability window is absent from the active configuration contract")
     h.start()
     check(h.status()["next_retry_ms"] == 0, "no retry time while connecting")
     check(wait(lambda: h.state() == "disconnected", 8), "refused attempt recorded")
@@ -802,6 +808,47 @@ def scenario_diagnostics(h: Harness) -> None:
     server.close()
 
 
+def scenario_snapshot_coherence(h: Harness) -> None:
+    """state, connection_attempts and next_retry_ms must agree in one snapshot.
+
+    A refused attempt plus a backoff sleep is sampled every millisecond across
+    two runs (the second sampled from the instant of start, where a state and a
+    counter used to be published separately)."""
+    port = free_port()
+    h.configure(port)
+    violations: list[str] = []
+    samples = 0
+    previous_attempts = 0
+    for phase in range(2):
+        h.start()
+        previous_attempts = 0
+        end = now() + (1.2 if phase == 0 else 0.4)
+        while now() < end:
+            client = h.status()
+            state = client["state"]
+            retry = int(client["next_retry_ms"])
+            attempts = int(client["connection_attempts"])
+            samples += 1
+            if retry > 0 and state != "disconnected":
+                violations.append(f"retry {retry} with state {state}")
+            if retry > 0 and not client["error"]:
+                violations.append(f"retry {retry} without an error")
+            if client["running"] and state == "stopped":
+                violations.append(f"running but stopped (attempts {attempts})")
+            if attempts < previous_attempts:
+                violations.append(f"attempts fell {previous_attempts} -> {attempts}")
+            if state == "disconnected" and retry == 0:
+                violations.append("disconnected without a published retry")
+            previous_attempts = attempts
+        h.stop()
+    check(samples > 100, f"enough snapshots were sampled ({samples})")
+    check(not violations, f"snapshot fields stay coherent ({violations[:4]})")
+    check(previous_attempts >= 1, "attempts were observed while sampling")
+    final = h.status()
+    check(final["state"] == "stopped" and int(final["next_retry_ms"]) == 0,
+          "the stopped snapshot is coherent")
+
+
 SCENARIOS = {    "connect-recovery": scenario_connect_recovery,
     "ready-unfocused": scenario_ready_unfocused,
     "transport-loss": scenario_transport_loss,
@@ -823,6 +870,24 @@ SCENARIOS = {    "connect-recovery": scenario_connect_recovery,
     "backoff-setup-short-ready": scenario_backoff_setup_short_ready,
     "backoff-cap": scenario_backoff_cap,
     "diagnostics": scenario_diagnostics,
+    "snapshot-coherence": scenario_snapshot_coherence,
+}
+
+# Accelerated stability window per scenario (milliseconds).  Scenarios that are
+# absent keep the fixed production 10 s policy.  The seam is an environment
+# variable read by the client, so the configuration contract stays unchanged.
+WINDOWS = {
+    "backoff-stable-resets": 300,
+    "backoff-unfocused-window": 300,
+    "backoff-setup-short-ready": 800,
+    "backoff-failure-progresses": 300,
+    "backoff-cap": 300,
+    "transport-loss": 300,
+    "disconnect-repeat-batch": 300,
+    "mixed-sustained": 300,
+    "reconnect-cinn": 300,
+    "resync-slots": 300,
+    "repeat-cycles": 300,
 }
 
 
@@ -845,6 +910,7 @@ def main() -> int:
         with tempfile.TemporaryDirectory(prefix="pki-", dir=pki_root) as pki:
             harness.certs = make_certificates(Path(pki))
             harness.context = server_context(harness.certs)
+            harness.window = WINDOWS.get(SCENARIO)
             harness.start_daemon()
             SCENARIOS[SCENARIO](harness)
     except Exception as exc:  # noqa: BLE001 - fixture reports the first failure
