@@ -157,6 +157,7 @@ class Harness:
         self.daemon: subprocess.Popen[bytes] | None = None
         self.saved: dict = {}
         self.certs: dict[str, Path] = {}
+        self.context: ssl.SSLContext | None = None
         self.accepts: list[float] = []
         self.closes: list[float] = []
 
@@ -223,7 +224,7 @@ class Harness:
 
     def accept_tls(self, server: socket.socket, limit: float = 8.0) -> ssl.SSLSocket:
         raw = self.accept(server, limit)
-        return server_context(self.certs).wrap_socket(raw, server_side=True, do_handshake_on_connect=False)
+        return self.context.wrap_socket(raw, server_side=True, do_handshake_on_connect=False)
 
     def negotiate(self, tls: ssl.SSLSocket, capture: int | None, seq_start: int = 1) -> int:
         """Classic hello/QINF, optional CINN. Returns the next sequence to use."""
@@ -281,8 +282,10 @@ def rss_kib(pid: int) -> int:
 
 # -- scenarios -------------------------------------------------------------
 
-def wait_disconnected(h: Harness, limit: float = 6.0) -> None:
+def wait_disconnected(h: Harness, limit: float = 20.0) -> float:
+    """Wait for the client to report the loss; return the detection time."""
     wait(lambda: h.state() == "disconnected", limit, "client reports the lost session")
+    return now()
 
 
 def reconnect(h: Harness, server: socket.socket) -> ssl.SSLSocket:
@@ -631,6 +634,8 @@ def scenario_backoff_stable_resets(h: Harness) -> None:
             if cycle < 2:
                 wait_disconnected(h)
         check(len(h.accepts) >= 3, "three connections were made")
+        # The first retry is always 1 s (nothing has doubled yet); the second is
+        # the discriminator: a reset keeps it at 1 s, a progression makes it 2 s.
         first, second = h.delay(1), h.delay(2)
         check(first < 1.8, f"first delay stays at one second ({first:.2f}s)")
         check(second < 1.8, f"a stable session resets the delay ({second:.2f}s)")
@@ -653,24 +658,151 @@ def scenario_backoff_failure_progresses(h: Harness) -> None:
 
 
 def scenario_backoff_default_window(h: Harness) -> None:
+    """Control: with the production 10 s window both policies must reset, so
+    this stays GREEN on the baseline and scopes the duration scenario."""
     with listener() as server:
         h.configure(server.getsockname()[1])
         h.start()
-        tls = h.accept_tls(server)
-        h.negotiate(tls, None)
-        wait(lambda: h.state() == "connected")
-        time.sleep(11.0)
-        h.close(tls)
-        tls2 = h.accept_tls(server)
-        delay = h.delay(1)
+        for cycle in range(3):
+            tls = h.accept_tls(server)
+            h.negotiate(tls, None)
+            wait(lambda: h.state() == "connected")
+            time.sleep(11.0)
+            h.close(tls)
+            if cycle < 2:
+                wait_disconnected(h, 20)
+        delay = h.delay(2)
         check(delay < 1.8, f"a session stable past the 10s default resets to one second ({delay:.2f}s)")
+        h.stop()
+
+
+def scenario_backoff_duration_over_window(h: Harness) -> None:
+    """A 12 s attempt whose readiness is only 9 s: the old elapsed-attempt
+    policy reset here, the readiness policy must not. Uses the production 10 s
+    window on both builds, so the comparison is like-for-like. The second retry
+    is the discriminator (the first is always 1 s)."""
+    with listener() as server:
+        h.configure(server.getsockname()[1])
+        h.start()
+        durations: list[float] = []
+        for cycle in range(3):
+            attempt = now()
+            raw = h.accept(server)
+            time.sleep(4.5)  # connection setup burns nearly the whole TLS deadline
+            tls = h.context.wrap_socket(raw, server_side=True)
+            h.negotiate(tls, None)
+            wait(lambda: h.state() == "connected")
+            time.sleep(6.5)  # readiness stays well below the 10 s window
+            h.close(tls)
+            lost = wait_disconnected(h, 20)
+            durations.append(lost - attempt)
+        check(min(durations) > 10.0,
+              f"attempts outlived the 10s window with only ~6.5s readiness "
+              f"({[round(d, 2) for d in durations]})")
+        delay = h.delay(2)
+        check(1.8 <= delay < 3.4, f"a short ready tail after slow setup keeps the progression ({delay:.2f}s)")
+        tls2 = h.accept_tls(server)
         h.negotiate(tls2, None)
         h.stop()
         tls2.close()
 
 
-SCENARIOS = {
-    "connect-recovery": scenario_connect_recovery,
+def scenario_backoff_unfocused_window(h: Harness) -> None:
+    with listener() as server:
+        h.configure(server.getsockname()[1], window=300)
+        h.start()
+        for cycle in range(3):
+            tls = h.accept_tls(server)
+            h.negotiate(tls, None)
+            wait(lambda: h.state() == "connected")
+            time.sleep(0.6)
+            h.close(tls)
+            if cycle < 2:
+                wait_disconnected(h)
+        delay = h.delay(2)
+        check(delay < 1.8, f"a ready but unfocused session still resets the delay ({delay:.2f}s)")
+        h.stop()
+
+
+def scenario_backoff_setup_short_ready(h: Harness) -> None:
+    with listener() as server:
+        h.configure(server.getsockname()[1], window=800)
+        h.start()
+        for cycle in range(3):
+            raw = h.accept(server)
+            time.sleep(1.2)  # setup alone outlives the window
+            tls = h.context.wrap_socket(raw, server_side=True)
+            h.negotiate(tls, None)
+            wait(lambda: h.state() == "connected")
+            time.sleep(0.2)  # readiness stays shorter than the window
+            h.close(tls)
+            if cycle < 2:
+                wait_disconnected(h)
+        delay = h.delay(2)
+        check(1.8 <= delay < 3.4, f"setup time is not stability ({delay:.2f}s)")
+        h.stop()
+
+
+def scenario_backoff_cap(h: Harness) -> None:
+    """Refused connects: the published retry duration must walk 1, 2, 4, 8, 16
+    and then hold at the 30 s cap."""
+    port = free_port()
+    h.configure(port)
+    h.start()
+    seen: list[int] = []
+    started = now()
+    deadline = started + 120
+    last = 0
+    while now() < deadline and (not seen or seen[-1] < 30000):
+        value = int(h.status()["next_retry_ms"])
+        if value and value != last:
+            seen.append(value)
+            last = value
+        time.sleep(0.02)
+    check(seen[:6] == [1000, 2000, 4000, 8000, 16000, 30000],
+          f"retry durations progress to the cap ({seen})")
+    check(seen[-1] == 30000, "the progression stops at 30 s")
+    at_cap = int(h.status()["connection_attempts"])
+    time.sleep(31.0)
+    check(int(h.status()["connection_attempts"]) > at_cap, "an attempt follows the 30 s delay")
+    check(int(h.status()["next_retry_ms"]) == 30000, "the delay remains capped at 30 s")
+    h.stop()
+
+
+def scenario_diagnostics(h: Harness) -> None:
+    port = free_port()
+    h.configure(port, window=300)
+    status = rpc(h.root, "status")
+    check("stability_window_ms" not in status["saved_config"],
+          "the stability window is not persisted into the saved configuration")
+    h.start()
+    check(h.status()["next_retry_ms"] == 0, "no retry time while connecting")
+    check(wait(lambda: h.state() == "disconnected", 8), "refused attempt recorded")
+    attempts = int(h.status()["connection_attempts"])
+    check(attempts == 1, f"attempt counter counts every attempt ({attempts})")
+    check(wait(lambda: h.status()["next_retry_ms"] > 0, 2), "retry time is published during backoff")
+    check(h.status()["next_retry_ms"] == 1000, "first retry time is the 1 s duration")
+    h.stop()
+    check(h.status()["next_retry_ms"] == 0, "retry time clears on stop")
+    check(h.status()["connection_attempts"] == attempts, "attempt counter survives stop unchanged")
+    server = socket.socket()
+    server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    server.bind(("127.0.0.1", port))
+    server.listen(4)
+    h.start()
+    check(int(h.status()["connection_attempts"]) <= 1, "attempt counter restarts for a fresh start")
+    tls = h.accept_tls(server)
+    h.negotiate(tls, None)
+    wait(lambda: h.state() == "connected")
+    check(h.status()["next_retry_ms"] == 0, "no retry time while ready")
+    check(h.status()["connection_attempts"] == 1, "ready session reports exactly one attempt")
+    h.stop()
+    check(h.status()["next_retry_ms"] == 0, "no stale retry time after a clean stop")
+    tls.close()
+    server.close()
+
+
+SCENARIOS = {    "connect-recovery": scenario_connect_recovery,
     "ready-unfocused": scenario_ready_unfocused,
     "transport-loss": scenario_transport_loss,
     "disconnect-repeat-batch": scenario_disconnect_repeat_batch,
@@ -686,6 +818,11 @@ SCENARIOS = {
     "backoff-stable-resets": scenario_backoff_stable_resets,
     "backoff-failure-progresses": scenario_backoff_failure_progresses,
     "backoff-default-window": scenario_backoff_default_window,
+    "backoff-duration-over-window": scenario_backoff_duration_over_window,
+    "backoff-unfocused-window": scenario_backoff_unfocused_window,
+    "backoff-setup-short-ready": scenario_backoff_setup_short_ready,
+    "backoff-cap": scenario_backoff_cap,
+    "diagnostics": scenario_diagnostics,
 }
 
 
@@ -707,6 +844,7 @@ def main() -> int:
     try:
         with tempfile.TemporaryDirectory(prefix="pki-", dir=pki_root) as pki:
             harness.certs = make_certificates(Path(pki))
+            harness.context = server_context(harness.certs)
             harness.start_daemon()
             SCENARIOS[SCENARIO](harness)
     except Exception as exc:  # noqa: BLE001 - fixture reports the first failure

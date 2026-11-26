@@ -176,6 +176,14 @@ if(BUILD_TESTING)
       COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/client_recovery.py
         $<TARGET_FILE:synergy-daemon> backoff-default-window)
     set_tests_properties(native-recovery-backoff-default-window PROPERTIES TIMEOUT 60)
+    add_test(NAME native-recovery-backoff-duration-over-window
+      COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/client_recovery.py
+        $<TARGET_FILE:synergy-daemon> backoff-duration-over-window)
+    set_tests_properties(native-recovery-backoff-duration-over-window PROPERTIES TIMEOUT 90)
+    add_test(NAME native-recovery-backoff-cap
+      COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/client_recovery.py
+        $<TARGET_FILE:synergy-daemon> backoff-cap)
+    set_tests_properties(native-recovery-backoff-cap PROPERTIES TIMEOUT 150)
     add_test(NAME native-bundle COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/bundle_tests.py)
     add_test(NAME gear-settings-spike COMMAND ${Python3_EXECUTABLE} -m unittest discover -s ${CMAKE_CURRENT_SOURCE_DIR}/../spikes/gear-settings -p test_*.py -v)
   endif()
